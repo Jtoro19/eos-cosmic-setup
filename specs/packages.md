@@ -83,7 +83,7 @@ Notes:
 - `ripgrep` and `fd` are listed in core although the host has them only as
   dependencies: the user's rules mandate `rg` and `fd`. They count as installed
   when present. They are the only listed packages that are not explicit on the
-  host, so lists hold 109 explicit packages + these 2 = 111 entries.
+  host, so lists hold 108 explicit packages + these 2 = 110 entries.
 - `base-devel`, `git` and `rust` are also installed by the `applets` module
   (build prerequisites). They stay in `dev` as the user-facing group; the
   helpers skip what is installed.
@@ -207,7 +207,6 @@ Notes:
 | office | libreoffice-fresh | pacman |
 | office | obsidian | pacman |
 | office | aspell | pacman |
-| office | knime-desktop | aur |
 
 ### printing
 
@@ -245,12 +244,13 @@ Notes:
 
 ## Excluded packages
 
-Explicit on the host but not listed anywhere: 150 packages. "Assumed present on
+Explicit on the host but not listed anywhere: 151 packages. "Assumed present on
 EndeavourOS" means a fresh EndeavourOS + COSMIC install already ships it, so
 listing it would add nothing and risk conflicts.
 
 | Package | Reason |
 |---------|--------|
+| knime-desktop | not wanted (removed at the user's request) |
 | accountsservice | base system, kernel or toolchain default (assumed present on EndeavourOS) |
 | alsa-firmware | hardware-specific driver, firmware or microcode (drivers module or this machine only) |
 | alsa-plugins | networking, bluetooth or audio stack (assumed present on EndeavourOS) |
@@ -404,9 +404,8 @@ listing it would add nothing and risk conflicts.
 
 ## Accounting
 
-109 explicit packages in lists + 1 (`ollama-rocm`, handled in code) + 150
-excluded = 260 = `pacman -Qqe`. See the counts in the task report for the
-per-list numbers; they can be recomputed with:
+108 explicit packages in lists + 1 (`ollama-rocm`, handled in code) + 151
+excluded = 260 = `pacman -Qqe`. The per-list numbers can be recomputed with:
 
 ```
 for f in files/packages/*; do echo "$f $(rg -vc '^(#|$)' "$f")"; done
