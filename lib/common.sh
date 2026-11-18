@@ -420,3 +420,31 @@ ensure_ini_line() {
   _priv_run "$file" install -m "$mode" -- "$tmp" "$file"
   rm -f -- "$tmp"
 }
+
+# --- GSettings --------------------------------------------------------------
+
+# ensure_gsetting <schema> <key> <value>: set a GSettings key only when the
+# current value differs. <value> uses gsettings' printed form (strings keep
+# their single quotes, for example "'prefer-dark'"). When gsettings or the
+# session bus is unavailable, warn and skip without failing. Read-only check,
+# so dry-run is accurate.
+ensure_gsetting() {
+  local schema="$1" key="$2" value="$3" current
+  if ! command -v gsettings >/dev/null 2>&1; then
+    log_warn "gsettings not found; skipping $schema $key"
+    return 0
+  fi
+  if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && ! -S "${XDG_RUNTIME_DIR:-/nonexistent}/bus" ]]; then
+    log_warn "no session bus; skipping $schema $key (run from a desktop session)"
+    return 0
+  fi
+  if ! current="$(gsettings get "$schema" "$key" 2>/dev/null)"; then
+    log_warn "cannot read $schema $key; skipping"
+    return 0
+  fi
+  if [[ "$current" == "$value" ]]; then
+    return 0
+  fi
+  log_change "gsettings set $schema $key $value (was $current)"
+  run gsettings set "$schema" "$key" "$value"
+}
