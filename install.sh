@@ -131,12 +131,12 @@ list_modules() {
 
 # run_module <file> <changes-out-file>: executed inside a subshell.
 run_module() {
-  local file="$1" out="$2" rc=0
+  local file="$1" changes_file="$2" rc=0
   CHANGES=0
   # shellcheck source=/dev/null
   source "$file"
   module_apply || rc=$?
-  printf '%s\n' "$CHANGES" >"$out"
+  printf '%s\n' "$CHANGES" >"$changes_file"
   return "$rc"
 }
 
