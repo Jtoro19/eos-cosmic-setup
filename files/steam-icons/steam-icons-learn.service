@@ -1,0 +1,14 @@
+[Unit]
+Description=Learn window app ids of running Steam games
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/steam-icons-learn
+Restart=on-failure
+RestartSec=10
+Nice=10
+
+[Install]
+WantedBy=graphical-session.target

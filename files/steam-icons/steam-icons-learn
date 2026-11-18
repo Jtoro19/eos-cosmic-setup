@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+# steam-icons-learn: learn the real window app_id of running Steam games.
+#
+# Native Linux games do not use steam_app_<appid> as their Wayland app_id; they
+# use an engine specific class (valheim.x86_64, Terraria, ...), and disk
+# heuristics cannot know it. This long-running script polls `lswt` every 3 s,
+# and for each NEW app_id that no desktop entry covers it works out which
+# running Steam game owns the window:
+#   strong match: a process under that game's `reaper SteamLaunch AppId=<id>`
+#                 has the app_id in its command line or name;
+#   fallback:     no strong match, but exactly one Steam game runs and its
+#                 reaper started less than 180 s ago.
+# Otherwise nothing is learned (an unrelated app is never mapped to a game).
+# A mapping is stored as `<appid>=<app_id>` in the override file read by
+# steam-icons-sync, then steam-icons-sync is run so the desktop entry gets the
+# new StartupWMClass. The icon shows after the game is reopened once.
+#
+# If lswt is missing, one message goes to stderr and the script keeps sleeping
+# (60 s per cycle) instead of exiting, so systemd never restart-loops it.
+set -u
+
+export LC_ALL=C
+
+TOOL_RE='^(Proton|Steam Linux Runtime|Steamworks Common Redistributables)'
+POLL_SECONDS="${STEAM_ICONS_LEARN_POLL:-3}"
+FALLBACK_WINDOW="${STEAM_ICONS_LEARN_WINDOW:-180}"
+PROC="${STEAM_ICONS_LEARN_PROC:-/proc}"
+SYNC_CMD="${STEAM_ICONS_SYNC_CMD:-$HOME/.local/bin/steam-icons-sync}"
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+override_file="${XDG_CONFIG_HOME:-$HOME/.config}/eos-cosmic-setup/steam-wmclass.conf"
+
+# Desktop entry dirs: user, system and flatpak exports.
+app_dirs=()
+if [[ -n "${STEAM_ICONS_LEARN_APP_DIRS:-}" ]]; then
+  IFS=: read -r -a app_dirs <<<"$STEAM_ICONS_LEARN_APP_DIRS"
+else
+  app_dirs=("$data/applications" /usr/share/applications /usr/local/share/applications
+    /var/lib/flatpak/exports/share/applications "$data/flatpak/exports/share/applications")
+fi
+
+declare -A handled=()
+
+# new_app_ids: print the app_ids of open windows, one per line. lswt -j is not
+# valid JSON (unquoted identifiers), so match the `"app-id": "..."` lines.
+new_app_ids() {
+  local line re='^[[:space:]]*"app-id":[[:space:]]*"(.*)"[[:space:]]*,?[[:space:]]*$'
+  while IFS= read -r line; do
+    if [[ "$line" =~ $re ]]; then
+      printf '%s\n' "${BASH_REMATCH[1]}"
+    fi
+  done < <(lswt -j 2>/dev/null)
+}
+
+# desktop_covers <app_id>: succeed when a desktop entry already matches it.
+desktop_covers() {
+  local id="$1" dir f lid
+  lid="${id,,}"
+  for dir in "${app_dirs[@]}"; do
+    [[ -d "$dir" ]] || continue
+    for f in "$dir"/*.desktop; do
+      [[ -f "$f" ]] || continue
+      f="${f##*/}"
+      [[ "${f,,}" == "$lid.desktop" ]] && return 0
+    done
+    if grep -qsiFx -- "StartupWMClass=$id" "$dir"/*.desktop 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# running_games: print "<appid> <reaper-pid>" per running Steam game. Only a
+# command line that STARTS with the reaper binary counts (anchored), so shells
+# or tools that merely mention the text never match.
+running_games() {
+  local d pid cmd re='^([^ ]*/)?reaper SteamLaunch AppId=([0-9]+)( |$)'
+  for d in "$PROC"/[0-9]*; do
+    pid="${d##*/}"
+    cmd="$({ tr '\0' ' ' <"$d/cmdline"; } 2>/dev/null)" || continue
+    if [[ "$cmd" =~ $re ]]; then
+      printf '%s %s\n' "${BASH_REMATCH[2]}" "$pid"
+    fi
+  done
+}
+
+# Process map, rebuilt by load_procs: parent and start time (ticks) per pid.
+declare -A proc_ppid=() proc_start=()
+load_procs() {
+  local d pid line rest
+  local -a a
+  proc_ppid=() proc_start=()
+  for d in "$PROC"/[0-9]*; do
+    pid="${d##*/}"
+    line="$({ cat -- "$d/stat"; } 2>/dev/null)" || continue
+    rest="${line##*) }"
+    read -r -a a <<<"$rest"
+    proc_ppid[$pid]="${a[1]:-0}"
+    proc_start[$pid]="${a[19]:-0}"
+  done
+}
+
+# descendants <pid>: print every pid below it (needs load_procs first).
+descendants() {
+  local root="$1" p q
+  local -a queue=("$root")
+  while ((${#queue[@]})); do
+    q="${queue[0]}"
+    queue=("${queue[@]:1}")
+    for p in "${!proc_ppid[@]}"; do
+      if [[ "${proc_ppid[$p]}" == "$q" && "$p" != "$root" ]]; then
+        printf '%s\n' "$p"
+        queue+=("$p")
+      fi
+    done
+  done
+}
+
+# strong_match <app_id> <reaper-pid>: succeed when a descendant's command line
+# or name contains the app_id (case-insensitive), or the app_id without a
+# .x86_64 / .bin.x86_64 suffix (only when that base has 4+ characters).
+strong_match() {
+  local id="${1,,}" reaper="$2" base p cmd
+  base="$id"
+  base="${base%.bin.x86_64}"
+  base="${base%.x86_64}"
+  while IFS= read -r p; do
+    cmd="$({ tr '\0' ' ' <"$PROC/$p/cmdline"; } 2>/dev/null)"
+    cmd="${cmd,,} $({ cat -- "$PROC/$p/comm"; } 2>/dev/null)"
+    cmd="${cmd,,}"
+    [[ "$cmd" == *"$id"* ]] && return 0
+    ((${#base} >= 4)) && [[ "$cmd" == *"$base"* ]] && return 0
+  done < <(descendants "$reaper")
+  return 1
+}
+
+# age_seconds <pid>: seconds since the process started (needs load_procs).
+age_seconds() {
+  local start="${proc_start[$1]:-}" hz up
+  [[ -n "$start" ]] || return 1
+  hz="$(getconf CLK_TCK 2>/dev/null)" || hz=100
+  read -r up _ <"$PROC/uptime" || return 1
+  printf '%s\n' "$((${up%.*} - start / hz))"
+}
+
+# is_tool <appid>: succeed when the appmanifest names a Steam tool.
+is_tool() {
+  local id="$1" dir m name re='^[[:space:]]*"name"[[:space:]]+"(.*)"[[:space:]]*$' line
+  local -a dirs=("$data/Steam/steamapps" "$HOME/.steam/steam/steamapps")
+  local lib vdf
+  for vdf in "$data/Steam/steamapps/libraryfolders.vdf" "$HOME/.steam/steam/steamapps/libraryfolders.vdf"; do
+    [[ -f "$vdf" ]] || continue
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^[[:space:]]*\"path\"[[:space:]]+\"(.*)\"[[:space:]]*$ ]]; then
+        lib="${BASH_REMATCH[1]}"
+        dirs+=("$lib/steamapps")
+      fi
+    done <"$vdf"
+  done
+  for dir in "${dirs[@]}"; do
+    m="$dir/appmanifest_$id.acf"
+    [[ -f "$m" ]] || continue
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      if [[ "$line" =~ $re ]]; then
+        name="${BASH_REMATCH[1]}"
+        [[ "$name" =~ $TOOL_RE ]] && return 0
+        return 1
+      fi
+    done <"$m"
+  done
+  return 1
+}
+
+# override_value <appid>: print the stored class, fail when there is none.
+override_value() {
+  local line
+  [[ -f "$override_file" ]] || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$1="* ]]; then
+      printf '%s\n' "${line#*=}"
+      return 0
+    fi
+  done <"$override_file"
+  return 1
+}
+
+# set_override <appid> <app_id>: store the mapping, replacing an old line of
+# the same appid; never duplicates.
+set_override() {
+  local id="$1" cls="$2" line tmp
+  mkdir -p -- "$(dirname "$override_file")" || return 1
+  tmp="$(mktemp "$override_file.XXXXXX")" || return 1
+  if [[ -f "$override_file" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == "$id="* ]] && continue
+      printf '%s\n' "$line"
+    done <"$override_file" >"$tmp"
+  fi
+  printf '%s=%s\n' "$id" "$cls" >>"$tmp"
+  chmod 0644 "$tmp"
+  mv -f -- "$tmp" "$override_file"
+}
+
+# decide <app_id>: print the appid the window belongs to, or nothing.
+decide() {
+  local id="$1" appid pid age n=0 cand_appid="" cand_pid="" g
+  local -a games=()
+  while read -r appid pid; do
+    [[ -n "$appid" ]] || continue
+    is_tool "$appid" && continue
+    games+=("$appid $pid")
+  done < <(running_games)
+  ((${#games[@]})) || return 0
+  load_procs
+  for g in "${games[@]}"; do
+    read -r appid pid <<<"$g"
+    if strong_match "$id" "$pid"; then
+      printf '%s\n' "$appid"
+      return 0
+    fi
+  done
+  # Fallback: exactly one running game, started recently.
+  for g in "${games[@]}"; do
+    read -r appid pid <<<"$g"
+    if [[ "$appid" != "$cand_appid" ]]; then
+      n=$((n + 1))
+      cand_appid="$appid"
+      cand_pid="$pid"
+    fi
+  done
+  if ((n == 1)); then
+    age="$(age_seconds "$cand_pid")" || return 0
+    if ((age >= 0 && age < FALLBACK_WINDOW)); then
+      printf '%s\n' "$cand_appid"
+    fi
+  fi
+  return 0
+}
+
+# handle_app_id <app_id>: learn one new app_id when it is a Steam game window.
+handle_app_id() {
+  local id="$1" appid cur
+  [[ -n "$id" ]] || return 0
+  [[ -n "${handled[$id]:-}" ]] && return 0
+  if [[ "$id" == steam_app_* ]] || desktop_covers "$id"; then
+    handled["$id"]=1
+    return 0
+  fi
+  appid="$(decide "$id")"
+  [[ -n "$appid" ]] || return 0
+  if cur="$(override_value "$appid")" && [[ "$cur" == "$id" ]]; then
+    handled["$id"]=1
+    return 0
+  fi
+  set_override "$appid" "$id" || return 0
+  handled["$id"]=1
+  printf 'learned %s -> %s\n' "$appid" "$id"
+  "$SYNC_CMD" || true
+}
+
+main() {
+  local id warned=0
+  trap 'exit 0' TERM INT
+  while true; do
+    if ! command -v lswt >/dev/null 2>&1; then
+      if ((!warned)); then
+        printf 'steam-icons-learn: lswt not found, idling\n' >&2
+        warned=1
+      fi
+      sleep 60 &
+      wait $!
+      continue
+    fi
+    while IFS= read -r id; do
+      handle_app_id "$id"
+    done < <(new_app_ids)
+    sleep "$POLL_SECONDS" &
+    wait $!
+  done
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main
+fi

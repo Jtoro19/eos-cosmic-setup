@@ -31,6 +31,8 @@ esac
 data="${XDG_DATA_HOME:-$HOME/.local/share}"
 apps_dir="$data/applications"
 icon_dir="$data/icons/hicolor/32x32/apps"
+# Optional manual app_id overrides for games the heuristic gets wrong.
+override_file="${XDG_CONFIG_HOME:-$HOME/.config}/eos-cosmic-setup/steam-wmclass.conf"
 
 added=0 updated=0 removed=0
 
@@ -150,16 +152,48 @@ sync_icon() {
   bump "$verb"
 }
 
-# sync_desktop <id> <name>: create or rewrite the marked desktop entry.
+# wm_class_for <id> <steamapps-dir> <manifest>: the window app_id of a game.
+# Proton games use steam_app_<id>. Native games use their executable name
+# (for example valheim.x86_64), detected as the only top-level ELF executable
+# in the install dir. An override file wins: lines "<id>=<class>".
+wm_class_for() {
+  local id="$1" dir="$2" manifest="$3" raw installdir f magic line
+  local -a elfs=()
+  if [[ -f "$override_file" ]]; then
+    while IFS= read -r line; do
+      if [[ "$line" == "$id="* && -n "${line#*=}" ]]; then
+        printf '%s\n' "${line#*=}"
+        return 0
+      fi
+    done <"$override_file"
+  fi
+  raw="$(vdf_value installdir "$manifest")" || raw=""
+  installdir="$(unescape "$raw")"
+  if [[ -n "$installdir" && -d "$dir/common/$installdir" ]]; then
+    for f in "$dir/common/$installdir"/*; do
+      [[ -f "$f" && -x "$f" ]] || continue
+      case "${f##*/}" in *.so | *.so.*) continue ;; esac
+      magic="$(head -c 4 -- "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+      [[ "$magic" == "7f454c46" ]] && elfs+=("${f##*/}")
+    done
+  fi
+  if ((${#elfs[@]} == 1)); then
+    printf '%s\n' "${elfs[0]}"
+  else
+    printf 'steam_app_%s\n' "$id"
+  fi
+}
+
+# sync_desktop <id> <name> <wm-class>: create or rewrite the marked desktop entry.
 sync_desktop() {
-  local id="$1" name="$2" dest="$apps_dir/steam_app_$1.desktop"
+  local id="$1" name="$2" wmclass="$3" dest="$apps_dir/steam_app_$1.desktop"
   local plain wanted current verb
   plain="[Desktop Entry]
 Type=Application
 Name=$name
 Exec=steam steam://rungameid/$id
 Icon=steam_icon_$id
-StartupWMClass=steam_app_$id
+StartupWMClass=$wmclass
 Categories=Game;
 Terminal=false"
   wanted="$plain
@@ -211,7 +245,7 @@ for dir in "${steamapps[@]}"; do
       continue
     fi
     [[ -n "$jpg" ]] && sync_icon "$id" "$jpg"
-    sync_desktop "$id" "$name"
+    sync_desktop "$id" "$name" "$(wm_class_for "$id" "$dir" "$manifest")"
   done
 done
 
