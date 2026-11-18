@@ -15,7 +15,7 @@ each holding one RON value. The payload is a byte-exact copy of those files in
 
 | Component (version) | Keys shipped and value |
 |---------------------|------------------------|
-| `com.system76.CosmicComp` (v1) | `autotile` true; `autotile_behavior` PerWorkspace; `active_hint` true; `appearance_settings` (clip floating and tiled windows, shadow on tiled); `input_default` (acceleration speed ~0.6, flat profile unset, not left handed); `xkb_config` (layout `us`, variant `altgr-intl`, repeat 600 ms / 25 per s) |
+| `com.system76.CosmicComp` (v1) | `autotile` true; `autotile_behavior` PerWorkspace; `active_hint` true; `appearance_settings` (clip floating and tiled windows, shadow on tiled); `input_default` (acceleration speed ~0.6, flat profile unset, not left handed). `xkb_config` is not shipped: it is generated at run time (see below) |
 | `com.system76.CosmicSettings.Shortcuts` (v1) | `custom` from `custom.in`: Super+Shift+S runs `cosmic-screenshot`, Alt+S runs `@HOME@/.local/bin/aura switcher` |
 | `com.system76.CosmicTk` (v1) | `header_size` Compact; `interface_density` Compact; `icon_theme` "Papirus-Dark" |
 | `com.system76.CosmicTheme.Mode` (v1) | `is_dark` true |
@@ -29,7 +29,17 @@ each holding one RON value. The payload is a byte-exact copy of those files in
 | `com.system76.CosmicFiles` (v1) | `context_actions` (PeaZip: open, extract here, extract to folder, compress), `desktop`, `dialog`, `show_details`, `tab` (show hidden, list view) |
 | `com.system76.CosmicAppList` (v1) | `enable_drag_source` true; `favorites` []; `filter_top_levels` None |
 
-Two deviations from a pure copy:
+Three deviations from a pure copy:
+
+- `CosmicComp/v1/xkb_config` is generated at run time from the system keyboard
+  (`localectl status`: `X11 Layout`, `X11 Variant`, `X11 Options`), so the
+  layout chosen in the EndeavourOS installer is kept (a layout list such as
+  `latam,us` is passed through). Empty variant renders `""`, empty options
+  render `None`, otherwise `Some("<options>")`; `"` and `\` are escaped. The key
+  repeat of the reference host is kept (`repeat_delay` 600, `repeat_rate` 25).
+  The RON is byte-exact with the file COSMIC writes (no trailing newline), so
+  the reference host reports no change. When `localectl` is missing or reports
+  no X11 layout, the file is left untouched and the module warns.
 
 - `Shortcuts/v1/custom.in` replaces the home directory with `@HOME@` and is
   rendered with the real `$HOME` at apply time (`install_template`).
@@ -57,6 +67,8 @@ Two deviations from a pure copy:
 - Every file under `files/cosmic/` is installed to `$HOME/.config/cosmic/<same
   relative path>` with mode 0644 (`.in` files are rendered, destination without
   `.in`). Keys not shipped are never modified or deleted.
+- `$HOME/.config/cosmic/com.system76.CosmicComp/v1/xkb_config`, generated from
+  the system keyboard (backed up first when it changes).
 - Package: `papirus-icon-theme` (official), needed for `Papirus-Dark`.
 - No services. cosmic-config watches the key files, so changes apply live; no
   COSMIC process is restarted.
@@ -68,7 +80,7 @@ none
 ## Idempotency check
 
 Each key file is compared byte by byte (`install_file`); the rendered shortcut
-is compared after rendering. The seed-only key is skipped when present. A
+and the generated `xkb_config` are compared after rendering. The seed-only key is skipped when present. A
 second run reports "Nothing to change".
 
 ## Revert
@@ -84,5 +96,6 @@ second run reports "Nothing to change".
 - `./install.sh --only cosmic-settings --dry-run` reports "Nothing to change"
   after a real run.
 - `rg -n '/home/' files/cosmic` prints nothing.
+- `tests/test-xkb.sh` checks the `xkb_config` renderer and the `localectl` parser.
 - `fd -t f 'font' files/cosmic` prints nothing.
 - `shellcheck -x install.sh lib/common.sh modules/*.sh files/kitty/kitty-cosmic-colors.sh`

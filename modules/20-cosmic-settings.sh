@@ -4,11 +4,70 @@
 # shellcheck disable=SC2034  # metadata is read by install.sh
 MODULE_NAME="cosmic-settings"
 # shellcheck disable=SC2034
-MODULE_DESC="COSMIC settings: tiling, keyboard, theme, icons, shortcuts, idle, files, terminal"
+MODULE_DESC="COSMIC settings: tiling, keyboard (system layout kept), theme, icons, shortcuts, idle, files, terminal"
 # shellcheck disable=SC2034
 MODULE_OPTIN=0
 # shellcheck disable=SC2034
 MODULE_DEPS=""
+
+# Key repeat of the reference host; the layout itself comes from the system.
+_COSMIC_XKB_REPEAT_DELAY=600
+_COSMIC_XKB_REPEAT_RATE=25
+
+# _cosmic_ron_escape <text>: escape a value for a RON string literal.
+_cosmic_ron_escape() {
+  local v="$1"
+  v="${v//\\/\\\\}"
+  v="${v//\"/\\\"}"
+  printf '%s' "$v"
+}
+
+# _cosmic_xkb_render <layout> <variant> <options>: print the CosmicComp
+# xkb_config RON, byte-exact with what COSMIC writes (no trailing newline).
+# An empty variant stays "", empty options become None.
+_cosmic_xkb_render() {
+  local layout variant opts
+  layout="$(_cosmic_ron_escape "$1")"
+  variant="$(_cosmic_ron_escape "$2")"
+  if [[ -n "$3" ]]; then
+    opts="Some(\"$(_cosmic_ron_escape "$3")\")"
+  else
+    opts="None"
+  fi
+  printf '(\n    rules: "",\n    model: "",\n    layout: "%s",\n    variant: "%s",\n    options: %s,\n    repeat_delay: %s,\n    repeat_rate: %s,\n)' \
+    "$layout" "$variant" "$opts" "$_COSMIC_XKB_REPEAT_DELAY" "$_COSMIC_XKB_REPEAT_RATE"
+}
+
+# _cosmic_xkb_field <field>: value of a `localectl status` line such as
+# "X11 Layout"; empty when the field is absent, unset or localectl is missing.
+_cosmic_xkb_field() {
+  localectl status 2>/dev/null | awk -v f="$1:" '
+    { line = $0; sub(/^[ \t]+/, "", line) }
+    index(line, f) == 1 {
+      v = substr(line, length(f) + 1)
+      sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+      if (v != "n/a" && v != "(unset)") print v
+      exit
+    }' || true
+}
+
+# _cosmic_xkb_apply <dest>: write the COSMIC keyboard config from the layout
+# the system already has (set by the EndeavourOS installer). Leaves the file
+# alone, with a warning, when the system reports no X11 layout.
+_cosmic_xkb_apply() {
+  local dest="$1" layout variant opts tmp
+  layout="$(_cosmic_xkb_field "X11 Layout")"
+  variant="$(_cosmic_xkb_field "X11 Variant")"
+  opts="$(_cosmic_xkb_field "X11 Options")"
+  if [[ -z "$layout" ]]; then
+    log_warn "localectl reports no X11 keyboard layout; leaving COSMIC xkb_config untouched"
+    return 0
+  fi
+  tmp="$(mktemp)"
+  _cosmic_xkb_render "$layout" "$variant" "$opts" >"$tmp"
+  install_file "$tmp" "$dest" 0644
+  rm -f -- "$tmp"
+}
 
 module_apply() {
   local src="$REPO_ROOT/files/cosmic"
@@ -43,4 +102,7 @@ module_apply() {
         ;;
     esac
   done
+
+  # Keyboard: follow the layout chosen in the installer instead of shipping one.
+  _cosmic_xkb_apply "$dst/com.system76.CosmicComp/v1/xkb_config"
 }

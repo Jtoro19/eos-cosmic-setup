@@ -28,6 +28,9 @@ works on any CPU or GPU vendor; hardware is detected at run time.
    ./install.sh --all 2>&1 | tee ~/install.log
    ```
 
+   Your keyboard layout from the EndeavourOS installer is kept; the installer
+   never changes it.
+
    Add optional groups with `--only`, for example
    `./install.sh --all --only packages-dev,packages-gaming`.
    Expect 20 to 40 minutes on a fresh machine: most of it is compiling two

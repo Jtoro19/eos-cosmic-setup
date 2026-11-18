@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# modules/08-locale.sh: system language, regional formats and keyboard layout.
+# modules/08-locale.sh: system language and regional formats.
 
 # shellcheck disable=SC2034  # metadata is read by install.sh
 MODULE_NAME="locale"
 # shellcheck disable=SC2034
-MODULE_DESC="locale: English UI with Colombian formats, us/altgr-intl keyboard (time zone only if LOCALE_TZ is set)"
+MODULE_DESC="locale: English UI with Colombian formats (keyboard and time zone are kept; time zone only if LOCALE_TZ is set)"
 # shellcheck disable=SC2034
 MODULE_OPTIN=0
 # shellcheck disable=SC2034
 MODULE_DEPS=""
 
 _LOCALE_GEN=("en_US.UTF-8 UTF-8" "es_CO.UTF-8 UTF-8")
-_LOCALE_KEYMAP="us"
-_LOCALE_XKB_LAYOUT="us"
-_LOCALE_XKB_VARIANT="altgr-intl"
 
 # _locale_gen_render <src>: print locale.gen with the wanted locales uncommented.
 _locale_gen_render() {
@@ -26,14 +23,6 @@ _locale_gen_render() {
     { print }
     END { for (k in want) if (!(k in done)) print k }
   ' "$1"
-}
-
-# _locale_status <field>: value of a `localectl status` field, for example
-# "VC Keymap" or "X11 Variant"; empty when unset.
-_locale_status() {
-  localectl status 2>/dev/null | awk -v f="$1" -F': ' '
-    { key = $1; sub(/^[ \t]+/, "", key) }
-    key == f { print $2; exit }'
 }
 
 module_apply() {
@@ -59,18 +48,8 @@ module_apply() {
   # LANG in English, regional formats (dates, numbers, money, paper) in es_CO.
   install_file "$REPO_ROOT/files/locale/locale.conf" /etc/locale.conf 0644
 
-  # Console keymap and the X11/XKB layout used by the greeter.
-  if [[ "$(_locale_status 'VC Keymap')" != "$_LOCALE_KEYMAP" ]]; then
-    log_change "set console keymap: $_LOCALE_KEYMAP"
-    run_sudo localectl set-keymap --no-convert "$_LOCALE_KEYMAP"
-  fi
-  if [[ "$(_locale_status 'X11 Layout')" != "$_LOCALE_XKB_LAYOUT" ||
-    "$(_locale_status 'X11 Variant')" != "$_LOCALE_XKB_VARIANT" ]]; then
-    log_change "set X11 keyboard: $_LOCALE_XKB_LAYOUT ($_LOCALE_XKB_VARIANT)"
-    run_sudo localectl set-x11-keymap --no-convert "$_LOCALE_XKB_LAYOUT" "" "$_LOCALE_XKB_VARIANT"
-  fi
-
-  # Time zone: the installer already asked for it, so only on request.
+  # The keyboard layout is not touched: the EndeavourOS installer already set
+  # it. Time zone: the installer already asked for it, so only on request.
   tz="${LOCALE_TZ:-}"
   if [[ -n "$tz" ]]; then
     if [[ ! -e "/usr/share/zoneinfo/$tz" ]]; then
