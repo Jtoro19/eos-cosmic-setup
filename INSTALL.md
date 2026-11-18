@@ -1,0 +1,122 @@
+# Installation guide
+
+Set up a new machine with this repository: from a fresh EndeavourOS install
+(with COSMIC, or with no desktop at all) to the full desktop in one run. It
+works on any CPU or GPU vendor; hardware is detected at run time.
+
+## Quick path
+
+1. **Install EndeavourOS.** Online install. Pick **COSMIC** as the desktop, or
+   **no desktop** (the `desktop` module installs COSMIC). Use any user name.
+2. **Clone the repository** (from a terminal or a TTY):
+
+   ```bash
+   sudo pacman -Syu --needed git
+   git clone https://github.com/Jtoro19/eos-cosmic-setup.git ~/eos-cosmic-setup
+   cd ~/eos-cosmic-setup
+   ```
+
+3. **Preview** what would change (applies nothing):
+
+   ```bash
+   ./install.sh --all --dry-run 2>&1 | tail -40
+   ```
+
+4. **Install**, keeping a log:
+
+   ```bash
+   ./install.sh --all 2>&1 | tee ~/install.log
+   ```
+
+   Add optional groups with `--only`, for example
+   `./install.sh --all --only packages-dev,packages-gaming`.
+   Expect 20 to 40 minutes on a fresh machine: most of it is compiling two
+   applets in Rust and one AUR package.
+
+5. **Run it again** to confirm nothing is left to do:
+
+   ```bash
+   ./install.sh --all
+   ```
+
+   The last line must read `total changes: 0`.
+
+6. **Reboot.** The machine boots to the COSMIC login.
+
+## Optional modules
+
+Opt-in modules run only when named with `--only`. Combine them freely:
+`./install.sh --all --only packages-dev,packages-media,kvm`.
+
+| Module | Use it when |
+|--------|-------------|
+| `packages-dev` | You develop: Docker, MariaDB, Go, Rust, Python, VS Code, Claude Code |
+| `packages-gaming` | You play: Steam, GameMode, MangoHud, ProtonUp-Qt |
+| `packages-media` | Creative and media apps: GIMP, Krita, Spotify, Vesktop, OBS, Kdenlive |
+| `packages-office` | LibreOffice and Obsidian |
+| `packages-printing` | You print or scan: CUPS drivers, HPLIP, SANE |
+| `packages-ai` | Local AI: Ollama built for your GPU (ROCm, CUDA or CPU) |
+| `packages-vmware` | VMware Workstation |
+| `kvm` | Virtual machines with QEMU/libvirt and virt-manager |
+| `wacom` | A Wacom tablet on a machine without an internal display |
+| `vesktop-mic` | Vesktop keeps lowering your microphone volume |
+
+`./install.sh --list` shows every module and whether it is opt-in.
+
+## Settings by environment variable
+
+Set them in front of the command, for example
+`LOCALE_TZ=America/Bogota ./install.sh --all`.
+
+| Variable | Effect |
+|----------|--------|
+| `LOCALE_TZ=<zone>` | Set the time zone (otherwise the installer's choice is kept) |
+| `SERVICES_SSHD=1` | Also enable the SSH server |
+| `FASTFETCH_SKIP_IMAGES=1` | Skip downloading the fastfetch logo images |
+| `APPLETS_REBUILD=1` | Update and rebuild Workspace Icons and Lock Keys |
+| `AURA_VERSION=<tag>` | Aura release to install (default `v1.5.0`) |
+| `AURA_REINSTALL=1` | Reinstall Aura, for example to change version |
+| `WACOM_OUTPUT=<name>` | Map the tablet to this output instead of the first one |
+| `WACOM_FORCE=1` | Map the tablet even if an internal display exists |
+
+## After installing
+
+- **NVIDIA GPU:** run `nvidia-inst` once, then reboot. It picks the right
+  driver and asks a few questions, so the installer does not run it for you.
+  GTX 10xx and older may need the legacy `nvidia-580xx-dkms` driver (AUR).
+- **Aura wallpapers:** copy your videos to `~/Pictures/Wallpapers/Aura`, apply
+  one in Aura, and it comes back at every login.
+- **Steam game icons:** Proton games show their icon from the first launch. A
+  native game shows a generic icon the first time; reopen it once and its icon
+  appears from then on.
+- **Groups** (docker, libvirt, kvm): log out and back in to use them.
+
+## Checklist after the first login
+
+- [ ] The panel has Workspace Icons on the left, Now Playing in the center, and
+      the clock, Lock Keys and system applets on the right.
+- [ ] The theme is dark with the purple accent and frosted glass.
+- [ ] `Super+T` opens kitty, with fastfetch and a random image.
+- [ ] `Super+Shift+S` opens the screenshot tool; `Alt+S` opens the Aura switcher.
+- [ ] GTK, Qt and Flatpak apps open in dark mode.
+- [ ] Copied text survives closing the app it came from.
+
+## If something goes wrong
+
+| Symptom | What to do |
+|---------|------------|
+| A module failed | Read the `[error]` line in `~/install.log`, fix the cause, run `./install.sh --all` again. Finished modules are skipped. |
+| You want to undo a change | Every overwritten file has a `<file>.bak.<timestamp>` copy next to it. The README lists how to revert each module. |
+| `yay is required` | AUR modules need `yay`, which EndeavourOS ships. Install it, then run again. |
+| An image repository is gone | fastfetch logs a warning and continues; nothing to do. |
+| No COSMIC login after reboot | Check `systemctl status cosmic-greeter` and run `./install.sh --only desktop`. |
+
+## Updating
+
+Pull and run again; only what changed is applied:
+
+```bash
+cd ~/eos-cosmic-setup && git pull && ./install.sh --all
+```
+
+See `README.md` for what each module does and how to revert it.

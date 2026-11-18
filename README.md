@@ -4,6 +4,8 @@ Turns a fresh EndeavourOS install (with COSMIC, or with no desktop at all) into 
 command. It is a set of small, idempotent bash modules that detect CPU and GPU
 vendor at run time, so the same repository works across machines.
 
+**New machine?** Follow [INSTALL.md](INSTALL.md) step by step.
+
 ## Requirements
 
 - EndeavourOS, installed with COSMIC or with no desktop (the `desktop` module installs COSMIC)
