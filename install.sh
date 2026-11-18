@@ -6,7 +6,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-MODULES_DIR="$REPO_ROOT/modules"
+# EOS_MODULES_DIR is a test-only override (tests/test-errexit.sh uses fake modules).
+MODULES_DIR="${EOS_MODULES_DIR:-$REPO_ROOT/modules}"
+
+# Nothing may stop to ask for credentials: a failed git clone must fail fast.
+export GIT_TERMINAL_PROMPT=0
 
 # Parallel arrays describing discovered modules (same index = same module).
 MOD_FILES=()
@@ -129,15 +133,76 @@ list_modules() {
   fi
 }
 
-# run_module <file> <changes-out-file>: executed inside a subshell.
+# run_module <file> <changes-out-file>: executed inside a subshell with
+# errexit on. module_apply is called plainly (never as `module_apply || ...`),
+# so the module stops at its first failed command. log_change mirrors the
+# running count into <changes-out-file>, so a module that fails still reports
+# the changes it made before failing.
 run_module() {
-  local file="$1" changes_file="$2" rc=0
+  local file="$1" changes_file="$2"
   CHANGES=0
+  _EOS_CHANGES_FILE="$changes_file"
   # shellcheck source=/dev/null
   source "$file"
-  module_apply || rc=$?
+  module_apply
   printf '%s\n' "$CHANGES" >"$changes_file"
-  return "$rc"
+}
+
+# setup_logging: tee all output (stdout and stderr) to a log file under
+# ${XDG_CACHE_HOME:-$HOME/.cache}/eos-cosmic-setup. Colors were decided when
+# lib/common.sh was sourced (on only for a terminal), so the terminal keeps
+# them; the log copy has the ANSI escape sequences stripped. Sets LOG_FILE and
+# TEE_PID. Failing to create the log only warns.
+LOG_FILE=""
+TEE_PID=""
+setup_logging() {
+  local dir="${XDG_CACHE_HOME:-$HOME/.cache}/eos-cosmic-setup" file
+  file="$dir/install-$(date +%Y%m%d-%H%M%S).log"
+  if ! mkdir -p -- "$dir" || ! : >>"$file"; then
+    log_warn "cannot write the log file $file; continuing without a log"
+    return 0
+  fi
+  LOG_FILE="$file"
+  exec > >(tee >(sed -u -e 's/\x1b\[[0-9;]*[A-Za-z]//g' >>"$LOG_FILE")) 2>&1
+  TEE_PID=$!
+}
+
+# start_sudo: ask for the sudo password once, then keep the timestamp fresh in
+# the background so no later step prompts. Stops the installer when sudo
+# cannot be authenticated. Sets KEEPALIVE_PID.
+KEEPALIVE_PID=""
+start_sudo() {
+  log_info "sudo is needed: type your password once; the rest runs unattended"
+  if ! sudo -v; then
+    log_error "sudo authentication failed; nothing was changed. Run the installer again and type your password when asked"
+    exit 1
+  fi
+  if ! sudo -n -v 2>/dev/null; then
+    log_error "sudo does not keep its credentials (timestamp_timeout=0?), so an unattended run is impossible"
+    exit 1
+  fi
+  # The loop ends by itself when the installer exits. Its output is detached so
+  # it never holds the log pipe open.
+  while kill -0 "$$" 2>/dev/null; do
+    sudo -n -v 2>/dev/null
+    sleep 60
+  done >/dev/null 2>&1 </dev/null &
+  KEEPALIVE_PID=$!
+}
+
+# cleanup: EXIT trap. Removes the temp file, stops the sudo keepalive and lets
+# the log pipe drain before the shell returns.
+cleanup() {
+  [[ -n "${CHANGES_FILE:-}" ]] && rm -f -- "$CHANGES_FILE"
+  if [[ -n "$KEEPALIVE_PID" ]]; then
+    # Its sleep first, so no orphan lingers for up to a minute.
+    pkill -P "$KEEPALIVE_PID" 2>/dev/null || true
+    kill "$KEEPALIVE_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$TEE_PID" ]]; then
+    exec >&- 2>&-
+    wait "$TEE_PID" 2>/dev/null || true
+  fi
 }
 
 # --- Argument parsing -------------------------------------------------------
@@ -231,7 +296,19 @@ done
 # --- Execution --------------------------------------------------------------
 
 CHANGES_FILE="$(mktemp)"
-trap 'rm -f -- "$CHANGES_FILE"' EXIT
+trap cleanup EXIT
+
+if ((${#SELECTED[@]} > 0)); then
+  setup_logging
+  if [[ -n "$LOG_FILE" ]]; then
+    log_info "log file: $LOG_FILE"
+  fi
+  if [[ "$DRY_RUN" != "1" && "${EOS_SKIP_SUDO:-0}" != "1" ]]; then
+    start_sudo
+  fi
+  # From here nothing may read the keyboard: any stray prompt sees EOF.
+  exec </dev/null
+fi
 
 declare -A BAD=()
 RAN=()
@@ -266,8 +343,16 @@ for ((i = 0; i < ${#MOD_NAMES[@]}; i++)); do
 
   log_info "module: $name"
   : >"$CHANGES_FILE"
+  # errexit must be active inside the module: `( ... ) || rc=$?` would turn it
+  # off for everything in the subshell, so capture the status the long way.
   rc=0
-  (run_module "${MOD_FILES[$i]}" "$CHANGES_FILE") || rc=$?
+  set +e
+  (
+    set -e
+    run_module "${MOD_FILES[$i]}" "$CHANGES_FILE"
+  )
+  rc=$?
+  set -e
   n="$(<"$CHANGES_FILE")"
   if [[ ! "$n" =~ ^[0-9]+$ ]]; then
     n=0
@@ -301,6 +386,9 @@ if [[ "$DRY_RUN" == "1" ]]; then
   fi
 else
   log_info "total changes: $TOTAL_CHANGES"
+fi
+if [[ -n "$LOG_FILE" ]]; then
+  log_info "log file: $LOG_FILE"
 fi
 
 if ((${#FAILED_LIST[@]} > 0 || ${#SKIPPED_LIST[@]} > 0)); then

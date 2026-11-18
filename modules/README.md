@@ -18,7 +18,38 @@ When sourced, a module must define:
 
 Modules are sourced in a subshell, so their variables and functions never leak
 between modules. A module must not source `lib/common.sh` itself: the helpers
-are already loaded by `install.sh`. A module must not call `exit`.
+are already loaded by `install.sh`. A module must not call `exit` itself (the
+helpers do, see fail-fast below).
+
+## Fail-fast contract
+
+Each module runs in its own subshell with `set -e` active, and `module_apply` is
+called plainly, so a module stops at its first failed command and the installer
+marks it failed (dependent modules are skipped, the final exit status is
+non-zero). Do not guard commands with `|| true` unless failure is truly fine.
+
+Some helpers are called as `helper || return 1`, which makes bash ignore `set -e`
+inside the helper. So `run` and `run_sudo` are fail-fast on their own: on a
+non-zero status in a real run they log `command failed (exit N): <cmd>` and
+`exit` with that status, which ends only the current module. A call site that
+really tolerates failure uses `run_may_fail` / `run_sudo_may_fail`: same as
+`run` / `run_sudo`, but they return the status and the caller handles it, for
+example `run_may_fail gtk-update-icon-cache ... || true`. Both are dry-run aware.
+
+Real runs use `sudo -n` (through `run_sudo`, or write `sudo -n` yourself when
+you must call sudo directly): the installer asks for the password once at the
+start, so an expired timestamp must fail fast and never prompt. Nothing may wait
+for input: use `--noconfirm`/`-y`, run builds with `</dev/null` and set
+`GIT_TERMINAL_PROMPT=0` for git (already exported by `install.sh`).
+
+## Test-only environment variables
+
+- `EOS_MODULES_DIR=<dir>`: make `install.sh` read modules from another directory
+  (used by `tests/` with fake modules). Never set it in a real run.
+- `EOS_SKIP_SUDO=1`: skip the initial `sudo -v` so tests can run a real (not
+  dry-run) pass without sudo. Never set it in a real run.
+
+Run `tests/run-tests.sh` after changing `install.sh` or `lib/common.sh`.
 
 Module files only define metadata and `module_apply` at the top level. They
 must not perform any action when sourced (the installer sources them just to
@@ -27,6 +58,7 @@ list them).
 ## Using the helpers
 
 Do all work through the helpers in `lib/common.sh` (`run`, `run_sudo`,
+`run_may_fail`, `run_sudo_may_fail`,
 `install_file`, `ensure_line`, `ensure_block`, `ensure_packages`,
 `ensure_aur_packages`, `ensure_user_unit_enabled`, `detect_cpu_vendor`,
 `detect_gpu_vendors`, logging functions). They provide dry-run support and

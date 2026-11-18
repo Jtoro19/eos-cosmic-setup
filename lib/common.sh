@@ -37,16 +37,28 @@ log_ok() { printf '%s[ok]%s %s\n' "$_C_GREEN" "$_C_RESET" "$*"; }
 log_warn() { printf '%s[warn]%s %s\n' "$_C_YELLOW" "$_C_RESET" "$*" >&2; }
 log_error() { printf '%s[error]%s %s\n' "$_C_RED" "$_C_RESET" "$*" >&2; }
 
-# Records one change and prints it.
+# Records one change and prints it. When install.sh set _EOS_CHANGES_FILE the
+# running count is mirrored there, so a module that fails (and so exits early)
+# still reports the changes it made. A module's own EXIT trap cannot lose it.
 log_change() {
   CHANGES=$((CHANGES + 1))
   printf '%s[change]%s %s\n' "$_C_CYAN" "$_C_RESET" "$*"
+  if [[ -n "${_EOS_CHANGES_FILE:-}" ]]; then
+    printf '%s\n' "$CHANGES" >"$_EOS_CHANGES_FILE" 2>/dev/null || true
+  fi
 }
 
 # --- Command execution ------------------------------------------------------
 
-# run <cmd...>: execute, or only print in dry-run mode.
-run() {
+# Contract: run and run_sudo are FAIL-FAST. A module runs in its own subshell,
+# so on a failed command they log it and `exit` with its status, which ends
+# only that module. This holds even when the caller is inside `helper || ...`
+# (where bash turns errexit off). Use run_may_fail / run_sudo_may_fail at a
+# call site that really tolerates failure and handle the status there.
+
+# run_may_fail <cmd...>: execute, or only print in dry-run mode. Returns the
+# command's status instead of exiting.
+run_may_fail() {
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] would run: %s\n' "$*"
     return 0
@@ -54,9 +66,35 @@ run() {
   "$@"
 }
 
-# run_sudo <cmd...>: like run, prefixed with sudo.
+# run <cmd...>: like run_may_fail, but a non-zero status ends the module.
+run() {
+  local rc=0
+  run_may_fail "$@" || rc=$?
+  if ((rc != 0)); then
+    log_error "command failed (exit $rc): $*"
+    exit "$rc"
+  fi
+}
+
+# run_sudo_may_fail <cmd...>: like run_may_fail, prefixed with sudo. Real runs
+# use `sudo -n` so an expired timestamp fails at once instead of prompting
+# (install.sh keeps the timestamp fresh after asking for the password once).
+run_sudo_may_fail() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    run_may_fail sudo "$@"
+  else
+    run_may_fail sudo -n "$@"
+  fi
+}
+
+# run_sudo <cmd...>: like run, prefixed with sudo (fail-fast).
 run_sudo() {
-  run sudo "$@"
+  local rc=0
+  run_sudo_may_fail "$@" || rc=$?
+  if ((rc != 0)); then
+    log_error "command failed (exit $rc): sudo $*"
+    exit "$rc"
+  fi
 }
 
 # _needs_sudo <path>: true when the path (or its nearest existing parent)
@@ -156,7 +194,7 @@ ensure_line() {
     return 0
   fi
   if _needs_sudo "$file"; then
-    printf '%s%s\n' "$prefix" "$line" | sudo tee -a -- "$file" >/dev/null
+    printf '%s%s\n' "$prefix" "$line" | sudo -n tee -a -- "$file" >/dev/null
   else
     printf '%s%s\n' "$prefix" "$line" >>"$file"
   fi
@@ -248,9 +286,11 @@ ensure_aur_packages() {
     return 0
   fi
   log_change "install AUR packages: ${missing[*]}"
-  # Answer yay's clean/diff/edit menus up front so it never stops to ask.
-  run yay -S --needed --noconfirm --answerclean None --answerdiff None \
-    --answeredit None --removemake "${missing[@]}"
+  # Answer yay's clean/diff/edit menus up front so it never stops to ask, and
+  # keep the sudo timestamp alive during long builds (--sudoloop). stdin is
+  # closed so nothing can wait for a keypress.
+  run yay -S --needed --noconfirm --sudoloop --answerclean None --answerdiff None \
+    --answeredit None --removemake "${missing[@]}" </dev/null
 }
 
 # _read_package_file <file>: print one package per line, dropping comments

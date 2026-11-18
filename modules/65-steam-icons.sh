@@ -59,7 +59,7 @@ module_apply() {
   # counts exact: enable --now would run the sync a second time and find nothing.
   _steam_icons_pending "$src/steam-icons-sync" || return 1
   if ((_STEAM_ICONS_PENDING > 0)); then
-    run "$script" || return 1
+    run "$script"
   fi
 
   # The path unit reacts to Steam changes; the service also syncs once per login.

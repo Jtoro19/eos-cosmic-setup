@@ -79,10 +79,10 @@ _aura_download_install() {
   # Refresh caches only when something was installed.
   if ((CHANGES != before)); then
     if command -v update-desktop-database >/dev/null 2>&1; then
-      run update-desktop-database "$share/applications" || true
+      run_may_fail update-desktop-database "$share/applications" || true
     fi
     if [[ -f "$share/icons/hicolor/icon-theme.cache" ]] && command -v gtk-update-icon-cache >/dev/null 2>&1; then
-      run gtk-update-icon-cache -f -t "$share/icons/hicolor" || true
+      run_may_fail gtk-update-icon-cache -f -t "$share/icons/hicolor" || true
     fi
   fi
 }
@@ -167,7 +167,7 @@ _aura_guard_autostart() {
   fi
   mode="$(stat -c %a -- "$config")"
   log_info "aura: setting autostart to false (the aura-restore unit restores the wallpaper)"
-  install_file "$tmp" "$config" "$mode" || true
+  install_file "$tmp" "$config" "$mode"
   rm -f -- "$tmp"
 }
 

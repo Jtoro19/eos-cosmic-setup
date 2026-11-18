@@ -22,14 +22,19 @@ works on any CPU or GPU vendor; hardware is detected at run time.
    ./install.sh --all --dry-run 2>&1 | tail -40
    ```
 
-4. **Install**, keeping a log:
+4. **Install.** Type your sudo password once when it asks, then walk away:
+   the rest runs unattended.
 
    ```bash
-   ./install.sh --all 2>&1 | tee ~/install.log
+   ./install.sh --all
    ```
 
-   Your keyboard layout from the EndeavourOS installer is kept; the installer
-   never changes it.
+   The full output is saved to
+   `~/.cache/eos-cosmic-setup/install-<date>-<time>.log` (the path is printed at
+   the start and at the end). If a command fails, that module stops, the
+   summary lists the failed modules and the exit status is non-zero. Your
+   keyboard layout from the EndeavourOS installer is kept; the installer never
+   changes it.
 
    Add optional groups with `--only`, for example
    `./install.sh --all --only packages-dev,packages-gaming`.
@@ -42,7 +47,7 @@ works on any CPU or GPU vendor; hardware is detected at run time.
    ./install.sh --all
    ```
 
-   The last line must read `total changes: 0`.
+   The summary must read `total changes: 0` (the last line is the log path).
 
 6. **Reboot.** The machine boots to the COSMIC login.
 
@@ -70,7 +75,7 @@ Opt-in modules run only when named with `--only`. Combine them freely:
 opt-in list from `--list`, so new modules are included automatically):
 
 ```bash
-./install.sh --all --only "$(./install.sh --list | awk '$2=="yes"{print $1}' | paste -sd,)" 2>&1 | tee ~/install.log
+./install.sh --all --only "$(./install.sh --list | awk '$2=="yes"{print $1}' | paste -sd,)"
 ```
 
 That is the same as naming them all:
@@ -140,7 +145,8 @@ Set them in front of the command, for example
 
 | Symptom | What to do |
 |---------|------------|
-| A module failed | Read the `[error]` line in `~/install.log`, fix the cause, run `./install.sh --all` again. Finished modules are skipped. |
+| A module failed | Read the `[error]` line in the newest `~/.cache/eos-cosmic-setup/install-*.log`, fix the cause, run `./install.sh --all` again. Finished modules are skipped. |
+| `sudo authentication failed` | The password at the start was wrong or sudo is not set up for your user. Nothing was changed; run it again and type the password when asked. |
 | You want to undo a change | Every overwritten file has a `<file>.bak.<timestamp>` copy next to it. The README lists how to revert each module. |
 | `yay is required` | AUR modules need `yay`, which EndeavourOS ships. Install it, then run again. |
 | An image repository is gone | fastfetch logs a warning and continues; nothing to do. |

@@ -29,6 +29,23 @@ vendor at run time, so the same repository works across machines.
 modified, the original is first saved as `<file>.bak.<timestamp>`
 (`YYYYmmdd-HHMMSS`). Running a module twice changes nothing the second time.
 
+**Type the password once.** A real run asks for the sudo password at the start
+(`sudo -v`) and keeps it valid in the background, so the rest runs unattended;
+if the password is wrong the installer stops before changing anything. Every
+step is non-interactive (`pacman --noconfirm`, `yay --sudoloop`, `flatpak -y`,
+`GIT_TERMINAL_PROMPT=0`, stdin closed). A module stops at its first failed
+command and the run ends with the list of failed modules and a non-zero exit.
+
+**Log.** Every run that executes modules (also `--dry-run`) copies all output
+to `${XDG_CACHE_HOME:-~/.cache}/eos-cosmic-setup/install-<YYYYmmdd-HHMMSS>.log`
+and prints that path at the start and in the summary. The terminal keeps its
+colors; the log has them stripped. Output goes through a pipe, so tools such as
+pacman show plain instead of animated progress.
+
+**Tests.** `tests/run-tests.sh` runs every `tests/test-*.sh` (errexit, sudo
+handling, the COSMIC keyboard renderer). They use fake modules and a fake
+`sudo`, need no privileges and change nothing on the machine.
+
 See `modules/README.md` for the module contract and `specs/README.md` for the
 spec template.
 

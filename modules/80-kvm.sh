@@ -53,7 +53,7 @@ _kvm_net_info() {
     err="$out"
     if [[ "$DRY_RUN" != "1" ]]; then
       # Fresh install: the user is not in the libvirt group in this session.
-      if out="$(sudo virsh -c "$_KVM_URI" net-info default 2>&1)"; then
+      if out="$(sudo -n virsh -c "$_KVM_URI" net-info default 2>&1)"; then
         printf '%s\n' "$out"
         return 0
       fi
@@ -77,14 +77,15 @@ _kvm_net_start() {
     run_sudo virsh -c "$_KVM_URI" net-start default
     return 0
   fi
-  if err="$(sudo virsh -c "$_KVM_URI" net-start default 2>&1)"; then
+  if err="$(sudo -n virsh -c "$_KVM_URI" net-start default 2>&1)"; then
     return 0
   fi
   if [[ "$err" == *"libvirt"*"zone"* || "$err" == *"zone"*"libvirt"* ]]; then
     log_warn "firewalld has no 'libvirt' zone yet; restarting firewalld and libvirtd, then retrying"
-    run_sudo systemctl restart firewalld
-    run_sudo systemctl restart libvirtd
-    if sudo virsh -c "$_KVM_URI" net-start default; then
+    # Best effort: the retry below decides whether the network came up.
+    run_sudo_may_fail systemctl restart firewalld || true
+    run_sudo_may_fail systemctl restart libvirtd || true
+    if sudo -n virsh -c "$_KVM_URI" net-start default; then
       return 0
     fi
   else

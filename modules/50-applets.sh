@@ -29,14 +29,17 @@ _applets_checkout() {
     run mkdir -p -- "$(dirname "$dir")"
     GIT_TERMINAL_PROMPT=0 run git clone --depth 1 -- "$url" "$dir"
   elif [[ "${APPLETS_REBUILD:-0}" == "1" ]]; then
-    GIT_TERMINAL_PROMPT=0 run git -C "$dir" pull --ff-only
+    # An update that cannot be fetched (offline) is not fatal: build what is
+    # already checked out.
+    GIT_TERMINAL_PROMPT=0 run_may_fail git -C "$dir" pull --ff-only ||
+      log_warn "could not update $dir; building the existing checkout"
   fi
 }
 
 # _applets_cargo_build <dir>: release build with the target dir inside the checkout.
 _applets_cargo_build() {
   local dir="$1"
-  run env CARGO_TARGET_DIR="$dir/target" cargo build --release --manifest-path "$dir/Cargo.toml"
+  run env CARGO_TARGET_DIR="$dir/target" cargo build --release --manifest-path "$dir/Cargo.toml" </dev/null
 }
 
 # _applets_build_deps: toolchain needed to compile the two applets.

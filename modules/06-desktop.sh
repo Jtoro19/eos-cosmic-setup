@@ -67,7 +67,7 @@ module_apply() {
   done
   if ((${#missing[@]} > 0)); then
     log_change "full system upgrade before installing the desktop"
-    run_sudo pacman -Syu --noconfirm || return 1
+    run_sudo pacman -Syu --noconfirm
   fi
   ensure_packages "${cosmic[@]}" "${_DESKTOP_BASE[@]}" || return 1
 
