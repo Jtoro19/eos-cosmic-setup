@@ -21,6 +21,13 @@ Per toolkit:
   `color-scheme='prefer-dark'` (GTK4/libadwaita, and web content that follows
   the system preference). Skipped with a warning when `gsettings` or the
   session bus is missing. No sudo.
+- GTK3 apps that ignore GSettings: `~/.config/gtk-3.0/settings.ini`
+  `[Settings]` gets `gtk-theme-name=adw-gtk3-dark` and
+  `gtk-application-prefer-dark-theme=1` (key by key, other keys kept). GTK3
+  reads this file under X11 when no XSETTINGS daemon runs, which is the case on
+  COSMIC, and apps that bundle their own GTK use it too. Found with VMware
+  Workstation, which ships `/usr/lib/vmware/lib/libgtk-3.so.0` and stayed light
+  while every other GTK app was dark.
 - Qt5/Qt6: packages `qt5ct`, `qt6ct`; `QT_QPA_PLATFORMTHEME=qt5ct` in
   `/etc/environment` (sudo). The qt6ct plugin registers both the `qt6ct` and
   `qt5ct` keys, so Qt6 apps load qt6ct and Qt5 apps load qt5ct with this one
@@ -59,6 +66,8 @@ reports no changes, so `--dry-run` is accurate.
 
 - `gsettings reset org.gnome.desktop.interface gtk-theme` and
   `gsettings reset org.gnome.desktop.interface color-scheme`.
+- Remove the two lines from `~/.config/gtk-3.0/settings.ini` (or restore its
+  `.bak.<timestamp>`).
 - `sudo sed -i '/^QT_QPA_PLATFORMTHEME=qt5ct$/d' /etc/environment` (or restore
   `/etc/environment.bak.<timestamp>`), then log out and back in.
 - Restore `~/.config/qt5ct/qt5ct.conf` and `~/.config/qt6ct/qt6ct.conf` from

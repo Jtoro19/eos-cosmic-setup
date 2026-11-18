@@ -15,6 +15,13 @@ _dark_mode_gtk() {
   ensure_packages adw-gtk-theme
   ensure_gsetting org.gnome.desktop.interface gtk-theme "'adw-gtk3-dark'"
   ensure_gsetting org.gnome.desktop.interface color-scheme "'prefer-dark'"
+
+  # GTK3 apps that do not read GSettings fall back to settings.ini: X11 apps
+  # with no XSETTINGS daemon (COSMIC runs none) and apps that bundle their own
+  # GTK, such as VMware Workstation (/usr/lib/vmware/lib/libgtk-3.so.0).
+  local ini="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/settings.ini"
+  ensure_ini_line "$ini" Settings "gtk-theme-name=adw-gtk3-dark" replace
+  ensure_ini_line "$ini" Settings "gtk-application-prefer-dark-theme=1" replace
 }
 
 # _dark_mode_qt: Qt5 and Qt6 through qt5ct/qt6ct.
