@@ -304,6 +304,35 @@ ensure_user_unit_enabled() {
   run systemctl --user enable --now "$unit"
 }
 
+# system_unit_exists <unit>: true when systemd knows the unit file.
+system_unit_exists() {
+  [[ -n "$(systemctl list-unit-files --no-legend -- "$1" 2>/dev/null)" ]]
+}
+
+# ensure_system_unit_enabled <unit>: enable and start a system unit only when
+# its unit file exists and it is not enabled yet. Read-only check.
+ensure_system_unit_enabled() {
+  local unit="$1"
+  system_unit_exists "$unit" || return 0
+  if systemctl is-enabled --quiet -- "$unit" >/dev/null 2>&1; then
+    return 0
+  fi
+  log_change "enable system unit: $unit"
+  run_sudo systemctl enable --now -- "$unit"
+}
+
+# ensure_user_in_group <group>: add $USER to an existing group. Takes effect
+# after the next login. Read-only check.
+ensure_user_in_group() {
+  local group="$1"
+  getent group "$group" >/dev/null 2>&1 || return 0
+  if id -nG "$USER" | tr ' ' '\n' | grep -qx -- "$group"; then
+    return 0
+  fi
+  log_change "add $USER to group $group (re-login needed)"
+  run_sudo usermod -aG "$group" "$USER"
+}
+
 # --- Hardware detection -----------------------------------------------------
 
 # detect_cpu_vendor: prints amd, intel or unknown.

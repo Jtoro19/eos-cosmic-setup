@@ -47,7 +47,7 @@ All modules are planned; none are implemented yet.
 | packages-ai | yes | Ollama build by GPU vendor: ollama-rocm (AMD), ollama-cuda (NVIDIA), else ollama | `sudo pacman -Rns ollama-rocm` (or the build you got); review first (details in `specs/packages.md`) |
 | packages-vmware | yes | VMware Workstation and keymaps (AUR) | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/vmware.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
 | locale | no | Locale settings (planned) | TBD |
-| services | no | System and user services (planned) | TBD |
+| services | no | Enables installed services only: NetworkManager, bluetooth, firewalld, power profiles, timesyncd, fstrim, avahi; cups, docker, mariadb, VMware when their group is installed; sshd only with `SERVICES_SSHD=1`; docker/adbusers groups. Never disables anything | `sudo systemctl disable --now <unit>`, `sudo gpasswd -d "$USER" <group>` (details in `specs/services.md`) |
 | flatpak | no | Flatpak setup (planned) | TBD |
 | mime | no | Default applications and MIME associations (planned) | TBD |
 | cosmic-settings | no | COSMIC settings as individual cosmic-config key files: PerWorkspace autotile, us/altgr-intl keyboard, Compact density, Papirus-Dark, purple accent with frosted theme, idle disabled, screenshot to clipboard, Super+Shift+S and Alt+S shortcuts, PeaZip actions in Files; no font keys, no panel keys | Restore the `<key>.bak.<timestamp>` files or delete the shipped key files under `~/.config/cosmic/` (details in `specs/cosmic-settings.md`) |
