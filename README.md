@@ -36,7 +36,7 @@ All modules are planned; none are implemented yet.
 
 | Module | Opt-in | What it does | How to revert |
 |--------|--------|--------------|---------------|
-| drivers | no | CPU/GPU vendor detection: microcode, Vulkan, ROCm on AMD (planned) | TBD |
+| drivers | no | CPU microcode (amd-ucode / intel-ucode) and GPU drivers (mesa, Vulkan, VA-API) chosen by detected vendor; NVIDIA via nvidia-inst | TBD |
 | pacman-conf | no | Pacman configuration (planned) | TBD |
 | packages | no | Base package set (planned) | TBD |
 | locale | no | Locale settings (planned) | TBD |
