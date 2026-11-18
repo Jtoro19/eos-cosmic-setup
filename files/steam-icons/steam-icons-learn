@@ -120,16 +120,20 @@ descendants() {
 # .x86_64 / .bin.x86_64 suffix (only when that base has 4+ characters).
 strong_match() {
   local id="${1,,}" reaper="$2" base p cmd
+  local -a pids=()
   base="$id"
   base="${base%.bin.x86_64}"
   base="${base%.x86_64}"
-  while IFS= read -r p; do
+  # Read the whole list first: returning early from a loop fed by a process
+  # substitution makes the producer hit a broken pipe.
+  mapfile -t pids < <(descendants "$reaper")
+  for p in "${pids[@]}"; do
     cmd="$({ tr '\0' ' ' <"$PROC/$p/cmdline"; } 2>/dev/null)"
     cmd="${cmd,,} $({ cat -- "$PROC/$p/comm"; } 2>/dev/null)"
     cmd="${cmd,,}"
     [[ "$cmd" == *"$id"* ]] && return 0
     ((${#base} >= 4)) && [[ "$cmd" == *"$base"* ]] && return 0
-  done < <(descendants "$reaper")
+  done
   return 1
 }
 
