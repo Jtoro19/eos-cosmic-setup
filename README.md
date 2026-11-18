@@ -32,11 +32,12 @@ spec template.
 
 ## Modules
 
-All modules are planned; none are implemented yet.
+Modules run in file-name order (`modules/NN-name.sh`). Opt-in modules only run
+when named with `--only`.
 
 | Module | Opt-in | What it does | How to revert |
 |--------|--------|--------------|---------------|
-| drivers | no | CPU microcode (amd-ucode / intel-ucode) and GPU drivers (mesa, Vulkan, VA-API) chosen by detected vendor; NVIDIA via nvidia-inst | TBD |
+| drivers | no | CPU microcode (amd-ucode / intel-ucode) and GPU drivers (mesa, Vulkan, VA-API) chosen by detected vendor; NVIDIA via nvidia-inst | `sudo pacman -Rns` the vendor packages it installed (listed in `specs/drivers.md`); keep mesa |
 | pacman-conf | no | `/etc/pacman.conf`: Color, ILoveCandy, VerbosePkgLists, ParallelDownloads = 5, and the multilib repository (full upgrade when multilib is newly enabled) | Restore `/etc/pacman.conf.bak.<timestamp>` (details in `specs/pacman-conf.md`) |
 | packages | no | Core everyday packages: browsers (Brave, Firefox, LibreWolf), CLI tools (bat, eza, fd, ripgrep, neovim...), fonts, codecs, PeaZip, yay; lists in `files/packages/core.*` | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/core.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
 | packages-dev | yes | Development: base-devel, git, Go, Rust, Python, uv, Docker, MariaDB, VS Code, Claude Code, Android tools | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/dev.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
@@ -45,7 +46,7 @@ All modules are planned; none are implemented yet.
 | packages-office | yes | Office: LibreOffice, Obsidian | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/office.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
 | packages-printing | yes | Printing and scanning: CUPS, HPLIP, Gutenprint, SANE; services not enabled | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/printing.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
 | packages-ai | yes | Ollama build by GPU vendor: ollama-rocm (AMD), ollama-cuda (NVIDIA), else ollama | `sudo pacman -Rns ollama-rocm` (or the build you got); review first (details in `specs/packages.md`) |
-| packages-vmware | yes | VMware Workstation and keymaps (AUR) | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/vmware.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
+| packages-vmware | yes | VMware Workstation and keymaps (AUR) | `yay -Rns $(rg -v '^(#|$)' files/packages/vmware.aur)`; review first (details in `specs/packages.md`) |
 | locale | no | English UI (`en_US`) with Colombian formats (`es_CO`), console and greeter keyboard `us altgr-intl`; time zone only with `LOCALE_TZ=<zone>` | Restore the `/etc/locale.gen` and `/etc/locale.conf` backups, `sudo locale-gen`, `localectl` for the keyboard (details in `specs/locale.md`) |
 | services | no | Enables installed services only: NetworkManager, bluetooth, firewalld, power profiles, timesyncd, fstrim, avahi; cups, docker, mariadb, VMware when their group is installed; sshd only with `SERVICES_SSHD=1`; docker/adbusers groups. Never disables anything | `sudo systemctl disable --now <unit>`, `sudo gpasswd -d "$USER" <group>` (details in `specs/services.md`) |
 | flatpak | no | Flatpak and the system-wide flathub remote; apps come from the package groups (`*.flatpak` lists: OBS and Kdenlive in media, ProtonUp-Qt in gaming) | `sudo flatpak uninstall --system <app>`, `sudo flatpak remote-delete --system flathub` (details in `specs/flatpak.md`) |
@@ -62,4 +63,13 @@ All modules are planned; none are implemented yet.
 | kvm | yes | KVM/QEMU virtualization: qemu-desktop, libvirt, virt-manager, virt-viewer, dnsmasq, UEFI and TPM; enables `libvirtd`, adds you to `libvirt` and `kvm`, starts the default network with autostart; skips if the CPU has no SVM/VT-x | `sudo virsh net-autostart --disable default`, `sudo systemctl disable --now libvirtd`, `sudo gpasswd -d "$USER" libvirt`, remove the packages (details in `specs/kvm.md`) |
 | wacom | yes | Maps detected Wacom tablets to the first enabled output in `~/.config/cosmic/com.system76.CosmicComp/v1/input_devices` (cosmic-comp drops tablet events without an internal display); merges, never overwrites; `WACOM_OUTPUT`, `WACOM_FORCE=1` | Restore `input_devices.bak.<timestamp>` (details in `specs/wacom.md`) |
 | vesktop-mic | yes | Stops Vesktop from lowering the mic volume: PipeWire `block-source-volume` rule, `--disable-features=WebRtcAllowInputVolumeAdjustment` flag, migrates the old `10-bloquear-agc.conf`; skipped without Vesktop | Delete `~/.config/pipewire/pipewire-pulse.conf.d/10-block-agc.conf` and restart pipewire (details in `specs/vesktop-mic.md`) |
-| boot | yes | Bootloader configuration (planned) | TBD |
+
+## Not managed
+
+- **Bootloader and kernel parameters.** The EndeavourOS installer configures
+  GRUB (or systemd-boot) and the initramfs correctly for each machine. The
+  reference host's extra parameters (`nowatchdog`, `nvme_load=YES`,
+  `usbcore.initial_descriptor_timeout=1000`) are tied to its hardware, and a
+  wrong boot setting can leave a machine unbootable, so there is no boot module.
+- **Personal data and secrets:** wallpapers, browser profiles, app state, SSH
+  and GPG keys. Wallpapers for Aura go in `~/Pictures/Wallpapers/Aura`.
