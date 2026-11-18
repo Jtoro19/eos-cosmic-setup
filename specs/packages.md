@@ -15,9 +15,14 @@ one-line edit.
 `pacman -Qqe` (explicit packages) and `pacman -Qqm` (foreign/AUR packages) on
 the reference host, classified so that every explicit package is in exactly one
 list or in the excluded table below. The lists live in
-`files/packages/<group>.pacman` (official repos) and `files/packages/<group>.aur`
-(AUR, needs `yay`). One package per line; `#` starts a comment; blank lines
-are ignored.
+`files/packages/<group>.pacman` (official repos), `files/packages/<group>.aur`
+(AUR, needs `yay`) and `files/packages/<group>.flatpak` (flathub app ids,
+installed system-wide; the `flatpak` module sets up the remote). One entry per
+line; `#` starts a comment; blank lines are ignored.
+
+Flatpak apps on the reference host (all system scope): `com.obsproject.Studio`
+and `org.kde.kdenlive` in `media.flatpak`, `net.davidotek.pupgui2`
+(ProtonUp-Qt) in `gaming.flatpak`.
 
 ## Modules and selection
 

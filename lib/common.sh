@@ -265,13 +265,17 @@ _read_package_file() {
 # them is actually missing. Returns non-zero on any failure.
 install_package_list() {
   local group="$1" dir="$REPO_ROOT/files/packages" pkg
-  local -a pac=() aur=() missing=()
-  if [[ ! -f "$dir/$group.pacman" && ! -f "$dir/$group.aur" ]]; then
+  local -a pac=() aur=() fp=() missing=()
+  if [[ ! -f "$dir/$group.pacman" && ! -f "$dir/$group.aur" && ! -f "$dir/$group.flatpak" ]]; then
     log_error "install_package_list: no package list for group '$group'"
     return 1
   fi
   mapfile -t pac < <(_read_package_file "$dir/$group.pacman")
   mapfile -t aur < <(_read_package_file "$dir/$group.aur")
+  mapfile -t fp < <(_read_package_file "$dir/$group.flatpak")
+  if ((${#fp[@]} > 0)); then
+    ensure_flatpaks "${fp[@]}" || return 1
+  fi
 
   if ((${#pac[@]} > 0)); then
     ensure_packages "${pac[@]}" || return 1
@@ -286,6 +290,33 @@ install_package_list() {
       ensure_aur_packages "${missing[@]}" || return 1
     fi
   fi
+}
+
+# --- Flatpak ----------------------------------------------------------------
+
+# ensure_flathub: flatpak installed and the system-wide flathub remote added.
+ensure_flathub() {
+  ensure_packages flatpak || return 1
+  if ! flatpak remotes --system --columns=name 2>/dev/null | grep -qx flathub; then
+    log_change "add system Flatpak remote flathub"
+    run_sudo flatpak remote-add --if-not-exists --system flathub \
+      https://dl.flathub.org/repo/flathub.flatpakrepo
+  fi
+}
+
+# ensure_flatpaks <app-id...>: install missing apps system-wide from flathub.
+ensure_flatpaks() {
+  local app
+  local -a missing=()
+  ensure_flathub || return 1
+  for app in "$@"; do
+    if ! flatpak info --system "$app" >/dev/null 2>&1; then
+      missing+=("$app")
+    fi
+  done
+  ((${#missing[@]} > 0)) || return 0
+  log_change "install Flatpak apps (system): ${missing[*]}"
+  run_sudo flatpak install --system -y --noninteractive flathub "${missing[@]}"
 }
 
 # --- systemd user units -----------------------------------------------------

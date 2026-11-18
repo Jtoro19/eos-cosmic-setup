@@ -54,16 +54,7 @@ _dark_mode_flatpak() {
     return 0
   fi
 
-  if ! flatpak remotes --system --columns=name 2>/dev/null | grep -qx flathub; then
-    log_change "add system Flatpak remote flathub"
-    run_sudo flatpak remote-add --if-not-exists --system flathub \
-      https://dl.flathub.org/repo/flathub.flatpakrepo
-  fi
-
-  if ! flatpak info --system "$theme" >/dev/null 2>&1; then
-    log_change "install Flatpak runtime $theme (system)"
-    run_sudo flatpak install --system -y --noninteractive flathub "$theme"
-  fi
+  ensure_flatpaks "$theme" || return 1
 
   if ! flatpak override --system --show 2>/dev/null |
     awk '/^\[/ { env = ($0 == "[Environment]") } env && $0 == "GTK_THEME=adw-gtk3-dark" { found = 1 } END { exit !found }'; then
