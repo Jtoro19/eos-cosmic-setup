@@ -34,9 +34,15 @@ _dark_mode_qt() {
     ensure_line "$env_file" "QT_QPA_PLATFORMTHEME=qt5ct"
   fi
 
-  # qt5ct/qt6ct may rewrite these files when their GUI is opened.
-  install_file "$src/qt5ct.conf" "$HOME/.config/qt5ct/qt5ct.conf" 0644
-  install_file "$src/qt6ct.conf" "$HOME/.config/qt6ct/qt6ct.conf" 0644
+  # Manage only the [Appearance] keys: qt5ct/qt6ct store their own state
+  # (window geometry, etc.) in the same file when their GUI is opened.
+  local tool line
+  for tool in qt5ct qt6ct; do
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" == \[* ]] && continue
+      ensure_ini_line "$HOME/.config/$tool/$tool.conf" Appearance "$line" replace
+    done <"$src/$tool.conf"
+  done
 }
 
 # _dark_mode_flatpak: system-wide adw-gtk3-dark runtime and GTK_THEME override.

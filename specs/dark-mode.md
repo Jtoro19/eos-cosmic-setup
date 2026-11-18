@@ -25,10 +25,12 @@ Per toolkit:
   `/etc/environment` (sudo). The qt6ct plugin registers both the `qt6ct` and
   `qt5ct` keys, so Qt6 apps load qt6ct and Qt5 apps load qt5ct with this one
   value. If `/etc/environment` already has a different `QT_QPA_PLATFORMTHEME=`
-  line, the module warns and adds nothing. Installs
-  `~/.config/qt5ct/qt5ct.conf` and `~/.config/qt6ct/qt6ct.conf` (Fusion style,
-  `darker` color scheme, `Papirus-Dark` icons; existing files are backed up).
-  qt5ct/qt6ct may rewrite their conf when the GUI is opened; that is accepted.
+  line, the module warns and adds nothing. Sets only the `[Appearance]` keys
+  of `~/.config/qt5ct/qt5ct.conf` and `~/.config/qt6ct/qt6ct.conf` (Fusion
+  style, `darker` color scheme, `Papirus-Dark` icons), key by key with
+  `ensure_ini_line ... replace`. Other sections that qt5ct/qt6ct write when
+  their GUI is opened (for example `[SettingsWindow]` geometry) are left alone,
+  so opening the GUI does not make the module report changes.
   Requires logout/login for the env var.
 - Flatpak (only if `flatpak` exists): system remote `flathub` if missing,
   runtime `org.gtk.Gtk3theme.adw-gtk3-dark` installed system-wide, and system
@@ -49,7 +51,7 @@ None.
 ## Idempotency check
 
 Every check is read-only: package presence, `gsettings get`, exact-line match
-in the env and flag files, byte comparison of the qt confs, `flatpak remotes`,
+in the env and flag files, per-key match of the qt `[Appearance]` keys, `flatpak remotes`,
 `flatpak info --system` and `flatpak override --system --show`. A second run
 reports no changes, so `--dry-run` is accurate.
 

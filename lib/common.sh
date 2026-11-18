@@ -383,9 +383,10 @@ remove_exact_block() {
 
 # ensure_ini_line <file> <section> <key=value>: make sure the exact line is
 # present under [section]. Creates the file or section when missing. If the
-# key already exists with a different value, warn and leave it alone.
+# key already exists with a different value, warn and leave it alone, unless
+# the optional 4th argument is "replace", which rewrites that key in place.
 ensure_ini_line() {
-  local file="$1" section="$2" entry="$3" key tmp mode="0644" state
+  local file="$1" section="$2" entry="$3" policy="${4:-keep}" key tmp mode="0644" state
   key="${entry%%=*}"
   tmp="$(mktemp)"
   if [[ -f "$file" ]]; then
@@ -399,8 +400,23 @@ ensure_ini_line() {
       rm -f -- "$tmp"
       return 0
     fi
-    if [[ "$state" == "conflict" ]]; then
+    if [[ "$state" == "conflict" && "$policy" != "replace" ]]; then
       log_warn "$file: key '$key' under [$section] has another value; leaving it"
+      rm -f -- "$tmp"
+      return 0
+    fi
+    if [[ "$state" == "conflict" ]]; then
+      # policy=replace: rewrite the first matching key in the section.
+      SEC="[$section]" ENTRY="$entry" KEY="$key" awk '
+        BEGIN { sec = ENVIRON["SEC"]; e = ENVIRON["ENTRY"]; k = ENVIRON["KEY"] }
+        /^\[/ { cur = ($0 == sec) }
+        cur && !done && index($0, k "=") == 1 { print e; done = 1; next }
+        { print }
+      ' "$file" >"$tmp"
+      mode="$(stat -c %a -- "$file")"
+      log_change "set '$entry' under [$section] in $file"
+      backup_file "$file"
+      _priv_run "$file" install -m "$mode" -- "$tmp" "$file"
       rm -f -- "$tmp"
       return 0
     fi
