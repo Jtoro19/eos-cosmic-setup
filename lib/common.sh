@@ -286,11 +286,19 @@ ensure_aur_packages() {
     return 0
   fi
   log_change "install AUR packages: ${missing[*]}"
+  # One package per yay call: when two targets depend on each other (for
+  # example vmware-workstation needs vmware-keymaps), yay builds both before
+  # installing either and the second build fails on the missing dependency.
+  # A single target lets yay resolve, build and install its AUR dependencies
+  # in order. A package already pulled in as a dependency is skipped.
   # Answer yay's clean/diff/edit menus up front so it never stops to ask, and
   # keep the sudo timestamp alive during long builds (--sudoloop). stdin is
   # closed so nothing can wait for a keypress.
-  run yay -S --needed --noconfirm --sudoloop --answerclean None --answerdiff None \
-    --answeredit None --removemake "${missing[@]}" </dev/null
+  for pkg in "${missing[@]}"; do
+    pkg_installed "$pkg" && continue
+    run yay -S --needed --noconfirm --sudoloop --answerclean None --answerdiff None \
+      --answeredit None --removemake "$pkg" </dev/null
+  done
 }
 
 # _read_package_file <file>: print one package per line, dropping comments
