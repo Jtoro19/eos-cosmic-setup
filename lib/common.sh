@@ -251,6 +251,43 @@ ensure_aur_packages() {
   run yay -S --needed --noconfirm "${missing[@]}"
 }
 
+# _read_package_file <file>: print one package per line, dropping comments
+# (whole-line or trailing) and blank lines. Prints nothing when missing.
+_read_package_file() {
+  [[ -f "$1" ]] || return 0
+  sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//' -- "$1" | grep -v '^$' || true
+}
+
+# install_package_list <group>: install files/packages/<group>.pacman with
+# ensure_packages and files/packages/<group>.aur with ensure_aur_packages.
+# Only missing packages are passed on (pacman -Qq counts dependencies as
+# installed). A group that lists AUR packages needs yay, but only when one of
+# them is actually missing. Returns non-zero on any failure.
+install_package_list() {
+  local group="$1" dir="$REPO_ROOT/files/packages" pkg
+  local -a pac=() aur=() missing=()
+  if [[ ! -f "$dir/$group.pacman" && ! -f "$dir/$group.aur" ]]; then
+    log_error "install_package_list: no package list for group '$group'"
+    return 1
+  fi
+  mapfile -t pac < <(_read_package_file "$dir/$group.pacman")
+  mapfile -t aur < <(_read_package_file "$dir/$group.aur")
+
+  if ((${#pac[@]} > 0)); then
+    ensure_packages "${pac[@]}" || return 1
+  fi
+  if ((${#aur[@]} > 0)); then
+    for pkg in "${aur[@]}"; do
+      if ! pkg_installed "$pkg"; then
+        missing+=("$pkg")
+      fi
+    done
+    if ((${#missing[@]} > 0)); then
+      ensure_aur_packages "${missing[@]}" || return 1
+    fi
+  fi
+}
+
 # --- systemd user units -----------------------------------------------------
 
 user_unit_enabled() {

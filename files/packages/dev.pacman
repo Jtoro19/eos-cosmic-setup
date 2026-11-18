@@ -1,0 +1,19 @@
+# Development tools (official repos).
+base-devel
+git
+go
+rust
+python
+python-pillow
+python-pyqt5
+python-reportlab
+uv
+docker
+docker-buildx
+docker-compose
+mariadb
+meld
+just
+android-tools
+android-udev
+shellcheck

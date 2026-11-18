@@ -38,7 +38,14 @@ All modules are planned; none are implemented yet.
 |--------|--------|--------------|---------------|
 | drivers | no | CPU microcode (amd-ucode / intel-ucode) and GPU drivers (mesa, Vulkan, VA-API) chosen by detected vendor; NVIDIA via nvidia-inst | TBD |
 | pacman-conf | no | `/etc/pacman.conf`: Color, ILoveCandy, VerbosePkgLists, ParallelDownloads = 5, and the multilib repository (full upgrade when multilib is newly enabled) | Restore `/etc/pacman.conf.bak.<timestamp>` (details in `specs/pacman-conf.md`) |
-| packages | no | Base package set (planned) | TBD |
+| packages | no | Core everyday packages: browsers (Brave, Firefox, LibreWolf), CLI tools (bat, eza, fd, ripgrep, neovim...), fonts, codecs, PeaZip, yay; lists in `files/packages/core.*` | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/core.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
+| packages-dev | yes | Development: base-devel, git, Go, Rust, Python, uv, Docker, MariaDB, VS Code, Claude Code, Android tools | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/dev.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
+| packages-gaming | yes | Gaming: Steam, GameMode, MangoHud (needs multilib) | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/gaming.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
+| packages-media | yes | Media and creative: GIMP, Krita, Spotify, Vesktop, Crunchyroll, IriunWebcam | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/media.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
+| packages-office | yes | Office: LibreOffice, Obsidian, KNIME | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/office.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
+| packages-printing | yes | Printing and scanning: CUPS, HPLIP, Gutenprint, SANE; services not enabled | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/printing.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
+| packages-ai | yes | Ollama build by GPU vendor: ollama-rocm (AMD), ollama-cuda (NVIDIA), else ollama | `sudo pacman -Rns ollama-rocm` (or the build you got); review first (details in `specs/packages.md`) |
+| packages-vmware | yes | VMware Workstation and keymaps (AUR) | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/vmware.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
 | locale | no | Locale settings (planned) | TBD |
 | services | no | System and user services (planned) | TBD |
 | flatpak | no | Flatpak setup (planned) | TBD |

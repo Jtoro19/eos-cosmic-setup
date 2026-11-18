@@ -1,0 +1,17 @@
+# Printing and scanning (official repos). Services are not enabled here.
+cups
+cups-browsed
+cups-filters
+cups-pdf
+foomatic-db
+foomatic-db-engine
+foomatic-db-gutenprint-ppds
+foomatic-db-nonfree
+foomatic-db-nonfree-ppds
+foomatic-db-ppds
+ghostscript
+gsfonts
+gutenprint
+hplip
+sane
+system-config-printer
