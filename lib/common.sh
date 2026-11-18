@@ -248,7 +248,9 @@ ensure_aur_packages() {
     return 0
   fi
   log_change "install AUR packages: ${missing[*]}"
-  run yay -S --needed --noconfirm "${missing[@]}"
+  # Answer yay's clean/diff/edit menus up front so it never stops to ask.
+  run yay -S --needed --noconfirm --answerclean None --answerdiff None \
+    --answeredit None --removemake "${missing[@]}"
 }
 
 # _read_package_file <file>: print one package per line, dropping comments
