@@ -43,7 +43,7 @@ All modules are planned; none are implemented yet.
 | services | no | System and user services (planned) | TBD |
 | flatpak | no | Flatpak setup (planned) | TBD |
 | mime | no | Default applications and MIME associations (planned) | TBD |
-| cosmic-settings | no | COSMIC desktop settings (planned) | TBD |
+| cosmic-settings | no | COSMIC settings as individual cosmic-config key files: PerWorkspace autotile, us/altgr-intl keyboard, Compact density, Papirus-Dark, purple accent with frosted theme, idle disabled, screenshot to clipboard, Super+Shift+S and Alt+S shortcuts, PeaZip actions in Files; no font keys, no panel keys | Restore the `<key>.bak.<timestamp>` files or delete the shipped key files under `~/.config/cosmic/` (details in `specs/cosmic-settings.md`) |
 | dark-mode | no | Dark theme (planned) | TBD |
 | clipboard | no | Clipboard survives closing the source app: `COSMIC_DATA_CONTROL_ENABLED=1` in `/etc/environment` and a `wl-clip-persist` systemd user service | `systemctl --user disable --now wl-clip-persist.service`, remove the unit, delete the line from `/etc/environment`, re-login (details in `specs/clipboard.md`) |
 | kitty | no | kitty as default terminal, frosted config, Ctrl+Shift+K clear, `clear` alias that wipes scrollback, selection color from the COSMIC accent (systemd path unit) | Restore the `*.bak.<timestamp>` files, `systemctl --user disable --now kitty-cosmic-colors.path`, remove the `kitty-clear` block from `~/.bashrc` (details in `specs/kitty.md`) |

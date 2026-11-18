@@ -1,0 +1,17 @@
+{
+    (
+        modifiers: [
+            Super,
+            Shift,
+        ],
+        key: "s",
+        description: Some("cosmic-screenshot"),
+    ): Spawn("cosmic-screenshot"),
+    (
+        modifiers: [
+            Alt,
+        ],
+        key: "s",
+        description: Some("aurahud"),
+    ): Spawn("@HOME@/.local/bin/aura switcher"),
+}

@@ -115,6 +115,31 @@ install_file() {
   _priv_run "$dest" install -m "$mode" -- "$src" "$dest"
 }
 
+# install_template <src.in> <dest> [mode]: render @HOME@ and @USER@ in the
+# template into a temp file, then install it with install_file (so backup,
+# idempotency and dry-run behave the same). Uses bash parameter expansion, so
+# paths with special characters (including "&") are substituted literally.
+install_template() {
+  local src="$1" dest="$2" mode="${3:-0644}" tmp content rc=0
+  if [[ ! -f "$src" ]]; then
+    log_error "install_template: source not found: $src"
+    return 1
+  fi
+  tmp="$(mktemp)"
+  # The sentinel keeps trailing newlines intact through command substitution.
+  content="$(
+    cat -- "$src"
+    printf x
+  )"
+  content="${content%x}"
+  content="${content//@HOME@/"$HOME"}"
+  content="${content//@USER@/"${USER:-$(id -un)}"}"
+  printf '%s' "$content" >"$tmp"
+  install_file "$tmp" "$dest" "$mode" || rc=$?
+  rm -f -- "$tmp"
+  return "$rc"
+}
+
 # ensure_line <file> <line>: append the line only if not already present.
 ensure_line() {
   local file="$1" line="$2" prefix=""
