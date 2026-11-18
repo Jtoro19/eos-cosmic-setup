@@ -67,6 +67,61 @@ _cosmic_xkb_apply() {
   _cosmic_xkb_render "$layout" "$variant" "$opts" >"$tmp"
   install_file "$tmp" "$dest" 0644
   rm -f -- "$tmp"
+  _cosmic_greeter_xkb_apply "$layout" "$variant" "$opts"
+}
+
+# _cosmic_greeter_xkb_apply <layout> <variant> <options>: give the login screen
+# the same keyboard. cosmic-greeter runs its own cosmic-comp as the
+# cosmic-greeter system user, which reads xkb_config from that user's home and
+# otherwise starts with the default (us) layout, even though the greeter shows
+# the user's layout. Its home is not readable without sudo, so the comparison
+# falls back to `sudo -n`; a dry-run without sudo skips the step instead of
+# reporting a change it cannot verify. EOS_GREETER_USER and EOS_GREETER_HOME
+# are test-only overrides.
+_cosmic_greeter_xkb_apply() {
+  local layout="$1" variant="$2" opts="$3"
+  local user="${EOS_GREETER_USER:-cosmic-greeter}" home group dest base tmp d same=0
+  home="${EOS_GREETER_HOME:-}"
+  if [[ -z "$home" ]]; then
+    home="$(getent passwd "$user" 2>/dev/null | cut -d: -f6)"
+  fi
+  if [[ -z "$home" ]]; then
+    log_info "no $user user; login screen keyboard not configured"
+    return 0
+  fi
+  group="$(id -gn "$user" 2>/dev/null || printf '%s' "$user")"
+  base="$home/.config/cosmic/com.system76.CosmicComp/v1"
+  dest="$base/xkb_config"
+
+  tmp="$(mktemp)"
+  _cosmic_xkb_render "$layout" "$variant" "$opts" >"$tmp"
+  if [[ -r "$dest" ]]; then
+    cmp -s -- "$tmp" "$dest" && same=1
+  elif sudo -n true 2>/dev/null; then
+    sudo -n cmp -s -- "$tmp" "$dest" 2>/dev/null && same=1
+  else
+    rm -f -- "$tmp"
+    log_info "cannot read the login screen keyboard config without sudo; skipped"
+    return 0
+  fi
+  if ((same)); then
+    rm -f -- "$tmp"
+    return 0
+  fi
+
+  log_change "install login screen keyboard ($layout): $dest"
+  # Create missing directories owned by the greeter user so it can still
+  # write the rest of its own COSMIC config.
+  for d in "$home/.config" "$home/.config/cosmic" "${base%/v1}" "$base"; do
+    if [[ ! -d "$d" ]] && ! sudo -n test -d "$d" 2>/dev/null; then
+      run_sudo install -d -o "$user" -g "$group" -m 0700 -- "$d"
+    fi
+  done
+  if [[ -e "$dest" ]] || sudo -n test -e "$dest" 2>/dev/null; then
+    run_sudo cp -p -- "$dest" "$dest.bak.$(date +%Y%m%d-%H%M%S)"
+  fi
+  run_sudo install -m 0644 -o "$user" -g "$group" -- "$tmp" "$dest"
+  rm -f -- "$tmp"
 }
 
 module_apply() {

@@ -29,7 +29,7 @@ each holding one RON value. The payload is a byte-exact copy of those files in
 | `com.system76.CosmicFiles` (v1) | `context_actions` (PeaZip: open, extract here, extract to folder, compress), `desktop`, `dialog`, `show_details`, `tab` (show hidden, list view) |
 | `com.system76.CosmicAppList` (v1) | `enable_drag_source` true; `favorites` []; `filter_top_levels` None |
 
-Three deviations from a pure copy:
+Four deviations from a pure copy:
 
 - `CosmicComp/v1/xkb_config` is generated at run time from the system keyboard
   (`localectl status`: `X11 Layout`, `X11 Variant`, `X11 Options`), so the
@@ -40,6 +40,19 @@ Three deviations from a pure copy:
   The RON is byte-exact with the file COSMIC writes (no trailing newline), so
   the reference host reports no change. When `localectl` is missing or reports
   no X11 layout, the file is left untouched and the module warns.
+- The same `xkb_config` is written for the **login screen**. cosmic-greeter
+  runs its own `cosmic-comp` as the `cosmic-greeter` system user (see
+  `/usr/bin/cosmic-greeter-start`), which reads its keyboard from
+  `/var/lib/cosmic-greeter/.config/cosmic/com.system76.CosmicComp/v1/xkb_config`
+  and otherwise starts with `us`, even though the greeter shows the user's
+  layout name. Found on a machine with a Latin American keyboard: at boot the
+  login screen typed in English while the lock screen (inside the session) was
+  right. Missing directories are created owned by `cosmic-greeter` (mode 0700)
+  and the file is installed owned by it. The greeter home is not readable
+  without root, so the comparison uses `sudo -n`; a dry-run without a sudo
+  timestamp skips this step with a note instead of reporting a change. Machines
+  without a `cosmic-greeter` user are left alone. Covered by
+  `tests/test-greeter-xkb.sh` (fake sudo, temporary home).
 
 - `Shortcuts/v1/custom.in` replaces the home directory with `@HOME@` and is
   rendered with the real `$HOME` at apply time (`install_template`).

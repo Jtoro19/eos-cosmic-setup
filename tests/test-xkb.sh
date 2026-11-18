@@ -73,6 +73,10 @@ out="$(PATH="$WORK/nolocalectl" _cosmic_xkb_field 'X11 Layout' 2>&1)"
 if [[ -z "$out" ]]; then check "missing localectl gives an empty value" 0; else check "missing localectl gives an empty value" 1; fi
 
 # End to end: no layout means xkb_config is left untouched and a warning shows.
+# The login screen step is covered by tests/test-greeter-xkb.sh; keep it away
+# from the real cosmic-greeter user here.
+export EOS_GREETER_USER="no-such-user-eos" EOS_GREETER_HOME=""
+log_info() { :; }
 log_warn() { printf 'WARN %s\n' "$*"; }
 install_file() { printf 'INSTALL %s\n' "$2"; }
 dest="$WORK/xkb_config"
