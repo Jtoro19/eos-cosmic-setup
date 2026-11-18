@@ -2,7 +2,7 @@
 
 Each module is one file `modules/NN-name.sh`, where `NN` is a two-digit order
 prefix (for example `10-base.sh`). `install.sh` discovers every `modules/*.sh`,
-sorted by file name. There are no real modules yet.
+sorted by file name. See `modules/40-kitty.sh` for a reference module.
 
 ## Contract
 

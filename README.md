@@ -47,7 +47,7 @@ All modules are planned; none are implemented yet.
 | dark-mode | no | Dark theme (planned) | TBD |
 | clipboard | no | Clipboard manager (planned) | TBD |
 | kitty | no | kitty as default terminal, frosted config, Ctrl+Shift+K clear, `clear` alias that wipes scrollback, selection color from the COSMIC accent (systemd path unit) | Restore the `*.bak.<timestamp>` files, `systemctl --user disable --now kitty-cosmic-colors.path`, remove the `kitty-clear` block from `~/.bashrc` (details in `specs/kitty.md`) |
-| fastfetch | no | Fastfetch configuration (planned) | TBD |
+| fastfetch | no | Installs fastfetch, imagemagick, git-lfs; builds a pool of random logo images in `~/.config/fastfetch/images` from seven third-party repos (skip with `FASTFETCH_SKIP_IMAGES=1`); `fastfetch` `~/.bashrc` block shows a random image as logo in kitty only; migrates the legacy unmanaged snippet | Remove the `fastfetch` block from `~/.bashrc`, optionally delete `~/.config/fastfetch/images`, `sudo pacman -Rns fastfetch` (details in `specs/fastfetch.md`) |
 | applets | no | COSMIC applets (planned) | TBD |
 | panel | no | COSMIC panel layout (planned) | TBD |
 | aura | no | Aura configuration (planned) | TBD |

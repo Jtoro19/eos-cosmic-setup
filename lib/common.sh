@@ -317,6 +317,45 @@ remove_line() {
   rm -f -- "$tmp"
 }
 
+# remove_exact_block <file> <multiline-text>: remove the first exact contiguous
+# occurrence of the given lines found OUTSIDE eos-cosmic-setup managed blocks.
+# Other occurrences are kept. Backs up first; counts as one change; dry-run
+# aware. Does nothing when the file or the text is missing.
+remove_exact_block() {
+  local file="$1" text="$2" tmp mode
+  [[ -f "$file" && -n "$text" ]] || return 0
+  tmp="$(mktemp)"
+  TEXT="$text" awk '
+    BEGIN { m = split(ENVIRON["TEXT"], pat, "\n") }
+    /^# >>> eos-cosmic-setup:/ { inb = 1 }
+    { n++; txt[n] = $0; blk[n] = inb }
+    /^# <<< eos-cosmic-setup:/ { inb = 0 }
+    END {
+      start = 0
+      for (i = 1; i + m - 1 <= n && !start; i++) {
+        ok = 1
+        for (j = 1; j <= m; j++) {
+          if (blk[i+j-1] || txt[i+j-1] != pat[j]) { ok = 0; break }
+        }
+        if (ok) start = i
+      }
+      for (i = 1; i <= n; i++) {
+        if (start && i >= start && i < start + m) continue
+        print txt[i]
+      }
+    }
+  ' "$file" >"$tmp"
+  if cmp -s -- "$file" "$tmp"; then
+    rm -f -- "$tmp"
+    return 0
+  fi
+  mode="$(stat -c %a -- "$file")"
+  log_change "remove legacy block from $file: ${text%%$'\n'*} ..."
+  backup_file "$file"
+  _priv_run "$file" install -m "$mode" -- "$tmp" "$file"
+  rm -f -- "$tmp"
+}
+
 # ensure_ini_line <file> <section> <key=value>: make sure the exact line is
 # present under [section]. Creates the file or section when missing. If the
 # key already exists with a different value, warn and leave it alone.
