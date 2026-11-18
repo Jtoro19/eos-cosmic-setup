@@ -37,7 +37,7 @@ All modules are planned; none are implemented yet.
 | Module | Opt-in | What it does | How to revert |
 |--------|--------|--------------|---------------|
 | drivers | no | CPU microcode (amd-ucode / intel-ucode) and GPU drivers (mesa, Vulkan, VA-API) chosen by detected vendor; NVIDIA via nvidia-inst | TBD |
-| pacman-conf | no | Pacman configuration (planned) | TBD |
+| pacman-conf | no | `/etc/pacman.conf`: Color, ILoveCandy, VerbosePkgLists, ParallelDownloads = 5, and the multilib repository (full upgrade when multilib is newly enabled) | Restore `/etc/pacman.conf.bak.<timestamp>` (details in `specs/pacman-conf.md`) |
 | packages | no | Base package set (planned) | TBD |
 | locale | no | Locale settings (planned) | TBD |
 | services | no | System and user services (planned) | TBD |
