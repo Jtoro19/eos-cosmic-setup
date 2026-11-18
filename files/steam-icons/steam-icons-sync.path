@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch Steam for installed or removed games
+
+[Path]
+PathChanged=%h/.local/share/Steam/steamapps
+PathChanged=%h/.local/share/Steam/appcache/librarycache
+Unit=steam-icons-sync.service
+
+[Install]
+WantedBy=default.target

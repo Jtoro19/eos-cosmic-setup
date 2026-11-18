@@ -1,0 +1,11 @@
+[Unit]
+Description=Create desktop entries and icons for installed Steam games
+# Steam rewrites appmanifest files many times while installing; never trip the rate limit.
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/steam-icons-sync
+
+[Install]
+WantedBy=graphical-session.target

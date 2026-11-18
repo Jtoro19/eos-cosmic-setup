@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+# steam-icons-sync: give every installed Steam game a desktop entry and icon so
+# COSMIC Workspace Icons can show the game icon.
+#
+# Steam/Proton windows use the Wayland app_id steam_app_<appid>. The applet
+# resolves icons from freedesktop desktop entries, so for each installed game
+# this writes ~/.local/share/applications/steam_app_<appid>.desktop and
+# ~/.local/share/icons/hicolor/32x32/apps/steam_icon_<appid>.png (converted
+# from Steam's cached icon). Files written here carry the marker line
+# X-Eos-Cosmic-Setup=steam-icons; only marked files are ever deleted.
+#
+# Steam tools (Proton, Steam Linux Runtime, Steamworks Common Redistributables)
+# are skipped by name. Usage: steam-icons-sync [--dry-run]
+set -u
+
+export LC_ALL=C
+
+MARKER="X-Eos-Cosmic-Setup=steam-icons"
+TOOL_RE='^(Proton|Steam Linux Runtime|Steamworks Common Redistributables)'
+
+dry=0
+case "${1:-}" in
+  "") ;;
+  --dry-run) dry=1 ;;
+  *)
+    printf 'usage: steam-icons-sync [--dry-run]\n' >&2
+    exit 2
+    ;;
+esac
+
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+apps_dir="$data/applications"
+icon_dir="$data/icons/hicolor/32x32/apps"
+
+added=0 updated=0 removed=0
+
+# say <verb> <what>: report one action ("would <verb>" in dry-run mode).
+say() {
+  if ((dry)); then
+    printf 'would %s %s\n' "$1" "$2"
+  else
+    case "$1" in
+      add) printf 'added %s\n' "$2" ;;
+      update) printf 'updated %s\n' "$2" ;;
+      *) printf 'removed %s\n' "$2" ;;
+    esac
+  fi
+}
+
+# bump <verb>: count one action.
+bump() {
+  case "$1" in
+    add) added=$((added + 1)) ;;
+    update) updated=$((updated + 1)) ;;
+    *) removed=$((removed + 1)) ;;
+  esac
+}
+
+# unescape <string>: undo the VDF escapes \\ and \" (minimal).
+unescape() {
+  local s="$1"
+  s="${s//\\\\/$'\x01'}"
+  s="${s//\\\"/\"}"
+  printf '%s' "${s//$'\x01'/\\}"
+}
+
+# vdf_value <key> <file>: first value of "<key>" "<value>" (raw, escaped).
+vdf_value() {
+  local line re="^[[:space:]]*\"$1\"[[:space:]]+\"(.*)\"[[:space:]]*\$"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ $re ]]; then
+      printf '%s' "${BASH_REMATCH[1]}"
+      return 0
+    fi
+  done <"$2"
+  return 1
+}
+
+# Steam root: the XDG data dir first, then the ~/.steam/steam symlink layout.
+root=""
+for cand in "$data/Steam" "$HOME/.steam/steam"; do
+  if [[ -d "$cand/steamapps" ]]; then
+    root="$(cd "$cand" && pwd -P)"
+    break
+  fi
+done
+[[ -n "$root" ]] || exit 0
+
+# steamapps directories: the root one plus every library in libraryfolders.vdf.
+declare -A seen_dir=()
+steamapps=()
+add_dir() {
+  local d
+  d="$(cd "$1" 2>/dev/null && pwd -P)" || return 0
+  [[ -n "${seen_dir[$d]:-}" ]] && return 0
+  seen_dir["$d"]=1
+  steamapps+=("$d")
+}
+add_dir "$root/steamapps"
+vdf="$root/steamapps/libraryfolders.vdf"
+if [[ -f "$vdf" ]]; then
+  path_re='^[[:space:]]*"path"[[:space:]]+"(.*)"[[:space:]]*$'
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ $path_re ]]; then
+      add_dir "$(unescape "${BASH_REMATCH[1]}")/steamapps"
+    fi
+  done <"$vdf"
+fi
+
+have_magick=0
+command -v magick >/dev/null 2>&1 && have_magick=1
+warned_magick=0
+
+# write_file <dest> <content>: replace dest atomically when content differs.
+write_file() {
+  local dest="$1" content="$2" tmp
+  tmp="$(mktemp "$(dirname "$dest")/.steam-icons.XXXXXX")" || return 1
+  printf '%s\n' "$content" >"$tmp"
+  chmod 0644 "$tmp"
+  mv -f -- "$tmp" "$dest"
+}
+
+# sync_icon <id> <src-jpg>: create or refresh the 32x32 png when needed.
+sync_icon() {
+  local id="$1" src="$2" dest="$icon_dir/steam_icon_$1.png" verb tmp
+  if [[ -e "$dest" && ! "$src" -nt "$dest" ]]; then
+    return 0
+  fi
+  if ((!have_magick)); then
+    if ((!warned_magick)); then
+      printf 'steam-icons-sync: magick not found, skipping icons\n' >&2
+      warned_magick=1
+    fi
+    return 0
+  fi
+  verb=add
+  [[ -e "$dest" ]] && verb=update
+  if ((!dry)); then
+    mkdir -p -- "$icon_dir"
+    tmp="$icon_dir/.steam-icons.$id.tmp.png"
+    if ! magick "$src" "$tmp" 2>/dev/null; then
+      rm -f -- "$tmp"
+      printf 'steam-icons-sync: cannot convert %s\n' "$src" >&2
+      return 0
+    fi
+    chmod 0644 "$tmp"
+    mv -f -- "$tmp" "$dest"
+  fi
+  say "$verb" "icon steam_icon_$id.png"
+  bump "$verb"
+}
+
+# sync_desktop <id> <name>: create or rewrite the marked desktop entry.
+sync_desktop() {
+  local id="$1" name="$2" dest="$apps_dir/steam_app_$1.desktop"
+  local plain wanted current verb
+  plain="[Desktop Entry]
+Type=Application
+Name=$name
+Exec=steam steam://rungameid/$id
+Icon=steam_icon_$id
+StartupWMClass=steam_app_$id
+Categories=Game;
+Terminal=false"
+  wanted="$plain
+$MARKER"
+  if [[ -e "$dest" ]]; then
+    current="$(<"$dest")"
+    [[ "$current" == "$wanted" ]] && return 0
+    # Ours: already marked, or identical to our output minus the marker.
+    if [[ "$current" != *"$MARKER"* && "$current" != "$plain" ]]; then
+      printf 'steam-icons-sync: %s is not managed here, leaving it alone\n' "$dest" >&2
+      return 0
+    fi
+    verb=update
+  else
+    verb=add
+  fi
+  if ((!dry)); then
+    mkdir -p -- "$apps_dir"
+    write_file "$dest" "$wanted" || return 0
+  fi
+  say "$verb" "desktop steam_app_$id.desktop ($name)"
+  bump "$verb"
+}
+
+# Installed games, then sync each one.
+declare -A games=()
+for dir in "${steamapps[@]}"; do
+  for manifest in "$dir"/appmanifest_*.acf; do
+    [[ -f "$manifest" ]] || continue
+    id="${manifest##*/appmanifest_}"
+    id="${id%.acf}"
+    [[ "$id" =~ ^[0-9]+$ ]] || continue
+    [[ -n "${games[$id]:-}" ]] && continue
+    raw="$(vdf_value name "$manifest")" || continue
+    name="$(unescape "$raw")"
+    name="${name//[$'\n\r']/}"
+    [[ -n "$name" ]] || continue
+    if [[ "$name" =~ $TOOL_RE ]]; then
+      continue
+    fi
+    games["$id"]=1
+
+    jpg=""
+    for f in "$root/appcache/librarycache/$id"/*.jpg; do
+      [[ -f "$f" ]] && jpg="$f" && break
+    done
+    if [[ -z "$jpg" && ! -e "$icon_dir/steam_icon_$id.png" ]]; then
+      # Icon not cached yet: wait for the next run instead of a broken entry.
+      continue
+    fi
+    [[ -n "$jpg" ]] && sync_icon "$id" "$jpg"
+    sync_desktop "$id" "$name"
+  done
+done
+
+# Cleanup: marked entries whose game is gone. Unmarked files are never touched.
+for f in "$apps_dir"/steam_app_*.desktop; do
+  [[ -f "$f" ]] || continue
+  id="${f##*/steam_app_}"
+  id="${id%.desktop}"
+  [[ -n "${games[$id]:-}" ]] && continue
+  grep -qxF -- "$MARKER" "$f" || continue
+  if ((!dry)); then
+    rm -f -- "$f"
+  fi
+  say remove "desktop steam_app_$id.desktop"
+  bump remove
+  if [[ -e "$icon_dir/steam_icon_$id.png" ]]; then
+    if ((!dry)); then
+      rm -f -- "$icon_dir/steam_icon_$id.png"
+    fi
+    say remove "icon steam_icon_$id.png"
+    bump remove
+  fi
+done
+
+if ((!dry && added + updated + removed > 0)); then
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$apps_dir" >/dev/null 2>&1 || true
+  fi
+  if command -v gtk-update-icon-cache >/dev/null 2>&1 && [[ -d "$data/icons/hicolor" ]]; then
+    gtk-update-icon-cache -f -t "$data/icons/hicolor" >/dev/null 2>&1 || true
+  fi
+fi
+
+if ((dry)); then
+  printf 'steam-icons-sync (dry run): %d to add, %d to update, %d to remove\n' "$added" "$updated" "$removed"
+else
+  printf 'steam-icons-sync: %d added, %d updated, %d removed\n' "$added" "$updated" "$removed"
+fi
+exit 0
