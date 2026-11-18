@@ -37,8 +37,13 @@ All repos are cloned shallow (`--depth 1`) into a `mktemp -d` directory under
 | `menhoudj` | menhoudj/my-fastfetch-config | `logos/` |
 | `themes` | CheikhNaro/ffthemes | root |
 | `mahe` | Maheswara660/fastfetch | `images/`, Git LFS (`git lfs pull`) |
-| `awesome` | Chintanpatel24/awesome-fastfetch | `PNGs/` |
 | `sofija` | sofijacom/dotfiles-fastfetch | `png/` |
+
+`Chintanpatel24/awesome-fastfetch` (prefix `awesome`, 35 images on the
+reference host) was removed from GitHub in November 2026, so it is no longer a
+source. Existing `awesome-*` files are kept. Clones run with
+`GIT_TERMINAL_PROMPT=0`: a repo that disappears or turns private fails at once
+with a warning instead of asking for GitHub credentials.
 
 Files matching `*.png`, `*.jpg`, `*.jpeg`, `*.webp` (case-insensitive) are
 copied with `cp --update=none`, excluding `*/.git/*` and `loli*`. Newly copied

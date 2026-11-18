@@ -27,9 +27,9 @@ _applets_checkout() {
   local url="$1" dir="$2"
   if [[ ! -d "$dir/.git" ]]; then
     run mkdir -p -- "$(dirname "$dir")"
-    run git clone --depth 1 -- "$url" "$dir"
+    GIT_TERMINAL_PROMPT=0 run git clone --depth 1 -- "$url" "$dir"
   elif [[ "${APPLETS_REBUILD:-0}" == "1" ]]; then
-    run git -C "$dir" pull --ff-only
+    GIT_TERMINAL_PROMPT=0 run git -C "$dir" pull --ff-only
   fi
 }
 

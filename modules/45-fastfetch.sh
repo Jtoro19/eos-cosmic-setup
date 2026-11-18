@@ -18,9 +18,14 @@ _FASTFETCH_SOURCES=(
   "menhoudj|menhoudj/my-fastfetch-config||logos|0"
   "themes|CheikhNaro/ffthemes|||0"
   "mahe|Maheswara660/fastfetch||images|1"
-  "awesome|Chintanpatel24/awesome-fastfetch||PNGs|0"
   "sofija|sofijacom/dotfiles-fastfetch||png|0"
 )
+# Chintanpatel24/awesome-fastfetch ("awesome-*" images) disappeared from
+# GitHub in 2026-11; existing awesome-* files are kept, nothing new is fetched.
+
+# Never stop to ask for credentials: a removed or private repo must fail fast
+# so the module can warn and continue.
+export GIT_TERMINAL_PROMPT=0
 
 # _fastfetch_fetch_source <prefix> <repo> <branch> <subdir> <lfs> <images> <bad> <tmp>
 # Clone one repo, copy matching images as <prefix>-<basename>, resize and
