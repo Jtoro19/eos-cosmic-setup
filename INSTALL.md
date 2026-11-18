@@ -63,6 +63,14 @@ Opt-in modules run only when named with `--only`. Combine them freely:
 
 `./install.sh --list` shows every module and whether it is opt-in.
 
+**Adding a group later** works the same on a machine that is already set up:
+modules that are done are skipped and only the new group is installed. For
+example, to add Steam and OBS afterwards:
+
+```bash
+cd ~/eos-cosmic-setup && ./install.sh --all --only packages-gaming,packages-media
+```
+
 ## Settings by environment variable
 
 Set them in front of the command, for example
@@ -86,9 +94,15 @@ Set them in front of the command, for example
   GTX 10xx and older may need the legacy `nvidia-580xx-dkms` driver (AUR).
 - **Aura wallpapers:** copy your videos to `~/Pictures/Wallpapers/Aura`, apply
   one in Aura, and it comes back at every login.
-- **Steam game icons:** Proton games show their icon from the first launch. A
-  native game shows a generic icon the first time; reopen it once and its icon
-  appears from then on.
+- **Steam game icons:** nothing to do. When a game finishes installing, its
+  launcher and icon are created automatically (and again at every login).
+  Proton games show their icon from the first launch. A native game shows a
+  generic icon the first time; reopen it once and its icon appears from then
+  on. To check that a game was picked up:
+
+  ```bash
+  eza ~/.local/share/applications | rg steam_app
+  ```
 - **Groups** (docker, libvirt, kvm): log out and back in to use them.
 
 ## Checklist after the first login
@@ -109,6 +123,7 @@ Set them in front of the command, for example
 | You want to undo a change | Every overwritten file has a `<file>.bak.<timestamp>` copy next to it. The README lists how to revert each module. |
 | `yay is required` | AUR modules need `yay`, which EndeavourOS ships. Install it, then run again. |
 | An image repository is gone | fastfetch logs a warning and continues; nothing to do. |
+| A Steam game keeps a generic icon | Close and reopen the game. If it persists, run `~/.local/bin/steam-icons-sync`, check `journalctl --user -u steam-icons-learn`, or set its app id by hand in `~/.config/eos-cosmic-setup/steam-wmclass.conf` (`<appid>=<app_id>`; read the app id with `lswt` while the game runs). |
 | No COSMIC login after reboot | Check `systemctl status cosmic-greeter` and run `./install.sh --only desktop`. |
 
 ## Updating
