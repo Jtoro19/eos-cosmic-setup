@@ -279,3 +279,80 @@ detect_gpu_vendors() {
   if ((nvidia)); then out+=(nvidia); fi
   printf '%s\n' "${out[*]:-}"
 }
+
+# --- Line and INI helpers ---------------------------------------------------
+
+# remove_line <file> <exact-line> [preceding-line]: remove every occurrence of
+# the exact line found OUTSIDE eos-cosmic-setup managed blocks. When
+# preceding-line is given, the line immediately above is removed too if it
+# matches exactly. Backs up first; counts as one change; dry-run aware.
+remove_line() {
+  local file="$1" line="$2" prev="${3:-}" tmp mode
+  [[ -f "$file" ]] || return 0
+  tmp="$(mktemp)"
+  LINE="$line" PREV="$prev" awk '
+    BEGIN { line = ENVIRON["LINE"]; prev = ENVIRON["PREV"] }
+    /^# >>> eos-cosmic-setup:/ { inb = 1 }
+    { n++; txt[n] = $0; blk[n] = inb }
+    /^# <<< eos-cosmic-setup:/ { inb = 0 }
+    END {
+      for (i = 1; i <= n; i++) del[i] = 0
+      for (i = 1; i <= n; i++) {
+        if (!blk[i] && txt[i] == line) {
+          del[i] = 1
+          if (prev != "" && i > 1 && !blk[i-1] && txt[i-1] == prev) del[i-1] = 1
+        }
+      }
+      for (i = 1; i <= n; i++) if (!del[i]) print txt[i]
+    }
+  ' "$file" >"$tmp"
+  if cmp -s -- "$file" "$tmp"; then
+    rm -f -- "$tmp"
+    return 0
+  fi
+  mode="$(stat -c %a -- "$file")"
+  log_change "remove legacy line from $file: $line"
+  backup_file "$file"
+  _priv_run "$file" install -m "$mode" -- "$tmp" "$file"
+  rm -f -- "$tmp"
+}
+
+# ensure_ini_line <file> <section> <key=value>: make sure the exact line is
+# present under [section]. Creates the file or section when missing. If the
+# key already exists with a different value, warn and leave it alone.
+ensure_ini_line() {
+  local file="$1" section="$2" entry="$3" key tmp mode="0644" state
+  key="${entry%%=*}"
+  tmp="$(mktemp)"
+  if [[ -f "$file" ]]; then
+    state="$(SEC="[$section]" ENTRY="$entry" KEY="$key" awk '
+      BEGIN { sec = ENVIRON["SEC"]; e = ENVIRON["ENTRY"]; k = ENVIRON["KEY"] }
+      /^\[/ { cur = ($0 == sec) }
+      cur && $0 == e { print "present"; exit }
+      cur && index($0, k "=") == 1 { print "conflict"; exit }
+    ' "$file")"
+    if [[ "$state" == "present" ]]; then
+      rm -f -- "$tmp"
+      return 0
+    fi
+    if [[ "$state" == "conflict" ]]; then
+      log_warn "$file: key '$key' under [$section] has another value; leaving it"
+      rm -f -- "$tmp"
+      return 0
+    fi
+    SEC="[$section]" ENTRY="$entry" awk '
+      BEGIN { sec = ENVIRON["SEC"]; e = ENVIRON["ENTRY"] }
+      { print }
+      $0 == sec && !done { print e; done = 1; found = 1 }
+      END { if (!found) { print ""; print sec; print e } }
+    ' "$file" >"$tmp"
+    mode="$(stat -c %a -- "$file")"
+  else
+    printf '[%s]\n%s\n' "$section" "$entry" >"$tmp"
+  fi
+  log_change "add '$entry' under [$section] in $file"
+  backup_file "$file"
+  _priv_run "$file" mkdir -p -- "$(dirname "$file")"
+  _priv_run "$file" install -m "$mode" -- "$tmp" "$file"
+  rm -f -- "$tmp"
+}

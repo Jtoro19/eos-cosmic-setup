@@ -46,7 +46,7 @@ All modules are planned; none are implemented yet.
 | cosmic-settings | no | COSMIC desktop settings (planned) | TBD |
 | dark-mode | no | Dark theme (planned) | TBD |
 | clipboard | no | Clipboard manager (planned) | TBD |
-| kitty | no | Kitty terminal configuration (planned) | TBD |
+| kitty | no | kitty as default terminal, frosted config, Ctrl+Shift+K clear, `clear` alias that wipes scrollback, selection color from the COSMIC accent (systemd path unit) | Restore the `*.bak.<timestamp>` files, `systemctl --user disable --now kitty-cosmic-colors.path`, remove the `kitty-clear` block from `~/.bashrc` (details in `specs/kitty.md`) |
 | fastfetch | no | Fastfetch configuration (planned) | TBD |
 | applets | no | COSMIC applets (planned) | TBD |
 | panel | no | COSMIC panel layout (planned) | TBD |
