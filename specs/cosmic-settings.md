@@ -60,6 +60,14 @@ Four deviations from a pure copy:
   resolution specific screen region). It is also seed-only: installed only when
   the file does not exist, because the portal rewrites it after every
   screenshot.
+- The theme accent keys (`CosmicTheme.{Dark,Light}.Builder/v2/accent`,
+  `CosmicTheme.{Dark,Light}/v2/accent` and `accent_button`) and
+  `CosmicTheme.Mode/v1/is_dark` are seed-only too. Aura has `auto_theme` and
+  `auto_dark` on: it recolors the accent and switches dark/light from the
+  current wallpaper. Shipping them on every run would reset the color Aura
+  picked (seen on the laptop after changing the wallpaper) and keep the dry-run
+  from ever reaching "Nothing to change". A new machine still starts with the
+  purple accent and dark mode; from then on Aura owns them.
 
 ### Explicitly excluded
 

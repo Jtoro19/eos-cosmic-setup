@@ -128,9 +128,19 @@ module_apply() {
   local src="$REPO_ROOT/files/cosmic"
   local dst="$HOME/.config/cosmic"
   local f rel dest
-  # Keys the desktop rewrites by itself (window state): seed them only when
-  # missing so a later run never fights the user.
-  local -a seed_only=("com.system76.CosmicPortal/v1/screenshot")
+  # Keys rewritten at run time: seed them only when missing so a later run
+  # never fights the user. The portal stores window state; Aura (auto_theme,
+  # auto_dark) recolors the accent and switches dark/light from the wallpaper.
+  local -a seed_only=(
+    "com.system76.CosmicPortal/v1/screenshot"
+    "com.system76.CosmicTheme.Dark.Builder/v2/accent"
+    "com.system76.CosmicTheme.Dark/v2/accent"
+    "com.system76.CosmicTheme.Dark/v2/accent_button"
+    "com.system76.CosmicTheme.Light.Builder/v2/accent"
+    "com.system76.CosmicTheme.Light/v2/accent"
+    "com.system76.CosmicTheme.Light/v2/accent_button"
+    "com.system76.CosmicTheme.Mode/v1/is_dark"
+  )
   local -a files=()
 
   # Papirus-Dark (CosmicTk icon_theme) needs this package.
