@@ -1,12 +1,12 @@
 # eos-cosmic-setup
 
-Turns a fresh EndeavourOS + COSMIC install into a configured desktop with one
+Turns a fresh EndeavourOS install (with COSMIC, or with no desktop at all) into a configured desktop with one
 command. It is a set of small, idempotent bash modules that detect CPU and GPU
 vendor at run time, so the same repository works across machines.
 
 ## Requirements
 
-- EndeavourOS with the COSMIC desktop
+- EndeavourOS, installed with COSMIC or with no desktop (the `desktop` module installs COSMIC)
 - bash
 - sudo (the installer refuses to run as root and calls sudo where needed)
 - yay (only for modules that install AUR packages)
@@ -37,7 +37,8 @@ when named with `--only`.
 
 | Module | Opt-in | What it does | How to revert |
 |--------|--------|--------------|---------------|
-| drivers | no | CPU microcode (amd-ucode / intel-ucode) and GPU drivers (mesa, Vulkan, VA-API) chosen by detected vendor; NVIDIA via nvidia-inst | `sudo pacman -Rns` the vendor packages it installed (listed in `specs/drivers.md`); keep mesa |
+| drivers | no | CPU microcode (amd-ucode / intel-ucode) and GPU drivers (mesa, Vulkan, VA-API) chosen by detected vendor (mesa + vulkan-swrast on VMs); NVIDIA via nvidia-inst | `sudo pacman -Rns` the vendor packages it installed (listed in `specs/drivers.md`); keep mesa |
+| desktop | no | COSMIC desktop and cosmic-greeter for a no-desktop install: full upgrade on first run, the `cosmic` group (minus initial-setup, osk, monitor), PipeWire, BlueZ, NetworkManager, packagekit, cups, avahi, firewalld; disables other display managers; graphical boot target | `sudo systemctl disable cosmic-greeter`, `sudo systemctl set-default multi-user.target` (details in `specs/desktop.md`) |
 | pacman-conf | no | `/etc/pacman.conf`: Color, ILoveCandy, VerbosePkgLists, ParallelDownloads = 5, and the multilib repository (full upgrade when multilib is newly enabled) | Restore `/etc/pacman.conf.bak.<timestamp>` (details in `specs/pacman-conf.md`) |
 | packages | no | Core everyday packages: browsers (Brave, Firefox, LibreWolf), CLI tools (bat, eza, fd, ripgrep, neovim...), fonts, codecs, PeaZip, yay; lists in `files/packages/core.*` | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/core.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |
 | packages-dev | yes | Development: base-devel, git, Go, Rust, Python, uv, Docker, MariaDB, VS Code, Claude Code, Android tools | `sudo pacman -Rns $(rg -v '^(#|$)' files/packages/dev.pacman)` (and `yay -Rns` for the `.aur` list); review first (details in `specs/packages.md`) |

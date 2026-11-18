@@ -52,17 +52,13 @@ none. The new microcode is loaded after the next initramfs rebuild and reboot.
   `unknown` -> `log_warn` and skip.
 - GPU: `detect_gpu_vendors` (PCI IDs 1002 AMD, 8086 Intel, 10de NVIDIA). It may
   return several vendors (hybrid laptops); each adds its own packages.
-- No match (VMs: virtio 1af4, QXL/bochs 1234, VMware 15ad): only `mesa` is
-  installed and the module logs "virtual GPU".
+- No match (VMs: virtio 1af4, QXL/bochs 1234, VMware 15ad, or no dedicated
+  GPU): `mesa` plus `vulkan-swrast` (software Vulkan, so Vulkan apps still
+  start; OpenGL comes from mesa's llvmpipe). The module logs "virtual GPU".
 - Multilib: lib32 packages are installed only when `/etc/pacman.conf` has an
   uncommented `[multilib]` header. Otherwise the module warns and skips them.
-  `drivers` runs before any future pacman-conf module, so on a fresh box
-  without multilib the lib32 packages are skipped on the first run and picked
-  up by a second run once multilib is enabled (`MODULE_DEPS` stays empty, the
-  check is simply repeated every run). Whether EndeavourOS ships multilib
-  enabled by default is unverified: on this host `/etc/pacman.conf` has it
-  enabled but the file differs from the packaged `pacman` checksum, so it may
-  have been edited.
+  `pacman-conf` (05) runs before `drivers` (10) and enables multilib, so the
+  lib32 packages install in the same run; the check is repeated every run.
 - NVIDIA: package selection is delegated to `nvidia-inst`, which picks the
   driver series and DKMS or not. If any `nvidia*` package other than
   `nvidia-inst` is installed, nothing is done. Otherwise the module installs
@@ -72,6 +68,9 @@ none. The new microcode is loaded after the next initramfs rebuild and reboot.
   `--nouveau` on some GPUs) and needs sudo. The flag list was read from the
   upstream script, not run. Nothing NVIDIA can be tested on the reference host;
   only the dry-run decision logic was exercised through the overrides below.
+  The user's own notes say GTX 10xx and older need the legacy
+  `nvidia-580xx-dkms` driver (AUR); whether `nvidia-inst` selects it on its
+  own is unverified, so check the result on such a card.
 
 ### Test-only overrides
 

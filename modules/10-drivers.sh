@@ -100,7 +100,10 @@ _drivers_gpu() {
   done
 
   if ((!known)); then
-    log_info "no AMD/Intel/NVIDIA GPU detected (virtual GPU?); installing mesa only"
+    # Virtual machine or no dedicated GPU: software Vulkan (lavapipe) so
+    # Vulkan apps still start; OpenGL comes from mesa's llvmpipe.
+    log_info "no AMD/Intel/NVIDIA GPU detected (virtual GPU?); installing mesa and vulkan-swrast"
+    pkgs+=(vulkan-swrast)
   fi
 
   # vulkan-icd-loader is a hard dependency of vulkan-radeon and vulkan-intel
