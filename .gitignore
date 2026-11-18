@@ -1,0 +1,17 @@
+# Local-only tooling, agent config and reference material (never committed)
+reference/
+.envrc
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.mcp.json
+BRIEF.md
+.atl/
+
+# Backups created by the installer
+*.bak.*
+
+# Editor junk
+*.swp
+*~

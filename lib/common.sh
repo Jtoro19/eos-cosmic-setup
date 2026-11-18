@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# lib/common.sh: shared helpers for install.sh and modules.
+#
+# This file is sourced, never executed. It deliberately does not set shell
+# options: the caller (install.sh) owns `set -euo pipefail`.
+
+# --- Globals ----------------------------------------------------------------
+
+# Repository root, resolved from this file's location (lib/..).
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export REPO_ROOT
+
+# 1 = print what would happen, change nothing.
+DRY_RUN="${DRY_RUN:-0}"
+export DRY_RUN
+
+# Number of changes made (or that would be made in dry-run).
+CHANGES=0
+
+# Files already backed up during this process (one backup per file per run).
+declare -A _BACKED_UP=()
+
+# --- Logging ----------------------------------------------------------------
+
+_C_RESET="" _C_BLUE="" _C_GREEN="" _C_YELLOW="" _C_RED="" _C_CYAN=""
+if [[ -t 1 ]]; then
+  _C_RESET=$'\033[0m'
+  _C_BLUE=$'\033[34m'
+  _C_GREEN=$'\033[32m'
+  _C_YELLOW=$'\033[33m'
+  _C_RED=$'\033[31m'
+  _C_CYAN=$'\033[36m'
+fi
+
+log_info() { printf '%s[info]%s %s\n' "$_C_BLUE" "$_C_RESET" "$*"; }
+log_ok() { printf '%s[ok]%s %s\n' "$_C_GREEN" "$_C_RESET" "$*"; }
+log_warn() { printf '%s[warn]%s %s\n' "$_C_YELLOW" "$_C_RESET" "$*" >&2; }
+log_error() { printf '%s[error]%s %s\n' "$_C_RED" "$_C_RESET" "$*" >&2; }
+
+# Records one change and prints it.
+log_change() {
+  CHANGES=$((CHANGES + 1))
+  printf '%s[change]%s %s\n' "$_C_CYAN" "$_C_RESET" "$*"
+}
+
+# --- Command execution ------------------------------------------------------
+
+# run <cmd...>: execute, or only print in dry-run mode.
+run() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] would run: %s\n' "$*"
+    return 0
+  fi
+  "$@"
+}
+
+# run_sudo <cmd...>: like run, prefixed with sudo.
+run_sudo() {
+  run sudo "$@"
+}
+
+# _needs_sudo <path>: true when the path (or its nearest existing parent)
+# is not writable by the current user.
+_needs_sudo() {
+  local p="$1"
+  if [[ -e "$p" && ! -w "$p" ]]; then
+    return 0
+  fi
+  while [[ ! -e "$p" ]]; do
+    p="$(dirname "$p")"
+  done
+  [[ -w "$p" ]] && return 1
+  return 0
+}
+
+# _priv_run <target-path> <cmd...>: run, with sudo only when the target
+# location is not writable by the current user.
+_priv_run() {
+  local target="$1"
+  shift
+  if _needs_sudo "$target"; then
+    run_sudo "$@"
+  else
+    run "$@"
+  fi
+}
+
+# --- File helpers -----------------------------------------------------------
+
+# backup_file <path>: copy to <path>.bak.<YYYYmmdd-HHMMSS>, once per run.
+backup_file() {
+  local path="$1" ts
+  [[ -e "$path" ]] || return 0
+  if [[ -n "${_BACKED_UP[$path]:-}" ]]; then
+    return 0
+  fi
+  _BACKED_UP["$path"]=1
+  ts="$(date +%Y%m%d-%H%M%S)"
+  _priv_run "$path" cp -p -- "$path" "$path.bak.$ts"
+}
+
+# install_file <src> <dest> [mode]: idempotent file install with backup.
+install_file() {
+  local src="$1" dest="$2" mode="${3:-0644}"
+  if [[ ! -f "$src" ]]; then
+    log_error "install_file: source not found: $src"
+    return 1
+  fi
+  if [[ -f "$dest" ]] && cmp -s -- "$src" "$dest"; then
+    return 0
+  fi
+  log_change "install $dest"
+  backup_file "$dest"
+  _priv_run "$dest" mkdir -p -- "$(dirname "$dest")"
+  _priv_run "$dest" install -m "$mode" -- "$src" "$dest"
+}
+
+# ensure_line <file> <line>: append the line only if not already present.
+ensure_line() {
+  local file="$1" line="$2" prefix=""
+  if [[ -f "$file" ]] && grep -qxF -- "$line" "$file"; then
+    return 0
+  fi
+  log_change "add line to $file: $line"
+  backup_file "$file"
+  _priv_run "$file" mkdir -p -- "$(dirname "$file")"
+  if [[ -s "$file" && -n "$(tail -c1 -- "$file")" ]]; then
+    prefix=$'\n'
+  fi
+  if [[ "$DRY_RUN" == "1" ]]; then
+    return 0
+  fi
+  if _needs_sudo "$file"; then
+    printf '%s%s\n' "$prefix" "$line" | sudo tee -a -- "$file" >/dev/null
+  else
+    printf '%s%s\n' "$prefix" "$line" >>"$file"
+  fi
+}
+
+# ensure_block <file> <marker-name> <content>: manage a delimited block.
+ensure_block() {
+  local file="$1" name="$2" content="$3"
+  local begin="# >>> eos-cosmic-setup:${name} >>>"
+  local end="# <<< eos-cosmic-setup:${name} <<<"
+  local tmp current mode="0644" action
+
+  tmp="$(mktemp)"
+
+  if [[ -f "$file" ]] && grep -qxF -- "$begin" "$file"; then
+    current="$(awk -v b="$begin" -v e="$end" \
+      '$0 == e { f = 0 } f { print } $0 == b { f = 1 }' "$file")"
+    if [[ "$current" == "$content" ]]; then
+      rm -f -- "$tmp"
+      return 0
+    fi
+    action="update"
+    BLOCK="$content" awk -v b="$begin" -v e="$end" '
+      $0 == b {
+        if (!done) { print b; print ENVIRON["BLOCK"]; print e; done = 1 }
+        inblock = 1
+        next
+      }
+      inblock { if ($0 == e) { inblock = 0 } next }
+      { print }
+    ' "$file" >"$tmp"
+  else
+    action="add"
+    if [[ -f "$file" ]]; then
+      cp -- "$file" "$tmp"
+      if [[ -s "$tmp" && -n "$(tail -c1 -- "$tmp")" ]]; then
+        printf '\n' >>"$tmp"
+      fi
+    fi
+    printf '%s\n%s\n%s\n' "$begin" "$content" "$end" >>"$tmp"
+  fi
+
+  if [[ -f "$file" ]]; then
+    mode="$(stat -c %a -- "$file")"
+  fi
+  log_change "$action block '$name' in $file"
+  backup_file "$file"
+  _priv_run "$file" mkdir -p -- "$(dirname "$file")"
+  _priv_run "$file" install -m "$mode" -- "$tmp" "$file"
+  rm -f -- "$tmp"
+}
+
+# --- Packages ---------------------------------------------------------------
+
+pkg_installed() {
+  pacman -Qq -- "$1" >/dev/null 2>&1
+}
+
+# ensure_packages <pkg...>: install only the missing official packages.
+ensure_packages() {
+  local pkg
+  local -a missing=()
+  for pkg in "$@"; do
+    if ! pkg_installed "$pkg"; then
+      missing+=("$pkg")
+    fi
+  done
+  if ((${#missing[@]} == 0)); then
+    return 0
+  fi
+  log_change "install packages: ${missing[*]}"
+  run_sudo pacman -S --needed --noconfirm "${missing[@]}"
+}
+
+# ensure_aur_packages <pkg...>: install only the missing AUR packages (yay).
+ensure_aur_packages() {
+  local pkg
+  local -a missing=()
+  if ! command -v yay >/dev/null 2>&1; then
+    log_error "yay is required for AUR packages: $*"
+    return 1
+  fi
+  for pkg in "$@"; do
+    if ! pkg_installed "$pkg"; then
+      missing+=("$pkg")
+    fi
+  done
+  if ((${#missing[@]} == 0)); then
+    return 0
+  fi
+  log_change "install AUR packages: ${missing[*]}"
+  run yay -S --needed --noconfirm "${missing[@]}"
+}
+
+# --- systemd user units -----------------------------------------------------
+
+user_unit_enabled() {
+  systemctl --user is-enabled --quiet "$1" >/dev/null 2>&1
+}
+
+ensure_user_unit_enabled() {
+  local unit="$1"
+  if user_unit_enabled "$unit"; then
+    return 0
+  fi
+  log_change "enable user unit: $unit"
+  run systemctl --user daemon-reload
+  run systemctl --user enable --now "$unit"
+}
+
+# --- Hardware detection -----------------------------------------------------
+
+# detect_cpu_vendor: prints amd, intel or unknown.
+detect_cpu_vendor() {
+  local vendor=""
+  if [[ -r /proc/cpuinfo ]]; then
+    vendor="$(grep -m1 '^vendor_id' /proc/cpuinfo || true)"
+  fi
+  case "$vendor" in
+    *AuthenticAMD*) printf 'amd\n' ;;
+    *GenuineIntel*) printf 'intel\n' ;;
+    *) printf 'unknown\n' ;;
+  esac
+}
+
+# detect_gpu_vendors: prints space-separated list of amd, intel, nvidia.
+detect_gpu_vendors() {
+  local lines id amd=0 intel=0 nvidia=0
+  local -a out=()
+  if ! command -v lspci >/dev/null 2>&1; then
+    printf '\n'
+    return 0
+  fi
+  lines="$(lspci -nn | grep -E 'VGA|3D|Display' || true)"
+  while IFS= read -r id; do
+    case "$id" in
+      '[1002:'*) amd=1 ;;
+      '[8086:'*) intel=1 ;;
+      '[10de:'*) nvidia=1 ;;
+      *) ;;
+    esac
+  done < <(printf '%s\n' "$lines" | grep -Eo '\[[0-9a-fA-F]{4}:[0-9a-fA-F]{4}\]' | tr 'A-F' 'a-f' || true)
+  if ((amd)); then out+=(amd); fi
+  if ((intel)); then out+=(intel); fi
+  if ((nvidia)); then out+=(nvidia); fi
+  printf '%s\n' "${out[*]:-}"
+}
