@@ -63,6 +63,24 @@ Opt-in modules run only when named with `--only`. Combine them freely:
 
 `./install.sh --list` shows every module and whether it is opt-in.
 
+**Install everything**, defaults plus every optional module (it reads the
+opt-in list from `--list`, so new modules are included automatically):
+
+```bash
+./install.sh --all --only "$(./install.sh --list | awk '$2=="yes"{print $1}' | paste -sd,)" 2>&1 | tee ~/install.log
+```
+
+That is the same as naming them all:
+
+```bash
+./install.sh --all --only packages-dev,packages-gaming,packages-media,packages-office,packages-printing,packages-ai,packages-vmware,kvm,wacom,vesktop-mic
+```
+
+Hardware modules stay safe on any machine: `kvm` skips if the CPU has no
+virtualization, `wacom` does nothing without a tablet, and `vesktop-mic` does
+nothing without Vesktop. Expect a longer first run (Steam, LibreOffice,
+VMware and the Ollama build for your GPU are large downloads).
+
 **Adding a group later** works the same on a machine that is already set up:
 modules that are done are skipped and only the new group is installed. For
 example, to add Steam and OBS afterwards:
